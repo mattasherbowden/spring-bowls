@@ -47,4 +47,7 @@ _Pending — will be populated from the background analysis with severity + test
 
 ## 3. Open decisions still needed
 
-See [requirements.md §8](requirements.md#8-open-decisions-pending-host-input) (OD-1 … OD-8). Four are being asked directly now; the rest have working defaults and can be confirmed later.
+See [requirements.md §8](requirements.md#8-open-decisions-pending-host-input) (OD-1 … OD-8).
+
+- **Resolved:** OD-1 (walkover 10–0), OD-2 (uneven groups allowed), OD-3 (build for patchy signal), OD-4 (block self only) — see [decisions.md](decisions.md) D-0005…D-0008.
+- **Still on defaults (confirm later):** OD-5 vote ties, OD-6 team lock point, OD-7 owner recovery, OD-8 shot sanity cap.

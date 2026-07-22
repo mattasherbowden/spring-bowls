@@ -60,7 +60,7 @@ A phone-first web app to run a one-day, teams-of-two lawn-bowls tournament for ~
 - **FR-B1** Only the owner can start "create tournament". *AC:* an admin or player never sees or can reach the create flow.
 - **FR-B2** The wizard is an interactive calculator: inputs are team count, team size (default 2), number of rinks, ends per game, minutes per end (incl. changeover), and advancement rule (top 1 or top 2). *AC:* changing any input immediately updates the outputs in FR-B3 with no page reload.
 - **FR-B3** Live outputs: fixtures per team (or range if uneven), total games, group layout, estimated total duration, and estimated finish time given a start time. *AC:* the estimate equals `ceil(total_games / rinks) × (ends × mins_per_end + changeover)` (± documented rounding) and is shown before generation.
-- **FR-B4** The wizard proposes a group layout automatically from the team count, and the owner can accept or adjust. *AC:* for N teams the proposal produces balanced group sizes (differ by at most 1) and states fixtures-per-team.
+- **FR-B4** The wizard proposes a group layout automatically from the team count, and the owner can accept or adjust. Uneven group sizes are allowed (differing by at most 1); the resulting fixtures-per-team spread is shown explicitly. *AC:* for N teams the proposal produces group sizes differing by at most 1 and states the min–max fixtures-per-team. *(Resolved — D-0006.)*
 - **FR-B5** Generation is explicit: nothing is created until the owner confirms "generate tournament". *AC:* abandoning the wizard creates no fixtures, teams, or logins.
 
 ### FR-C · Teams & players
@@ -92,7 +92,7 @@ A phone-first web app to run a one-day, teams-of-two lawn-bowls tournament for ~
 - **FR-F4** First valid submission **locks** the fixture and records "entered by <name>". *AC:* after lock, a second player's submit is rejected with a clear "already entered by X" message.
 - **FR-F5** Owner/admin can unlock and correct a locked score; the change is attributed and the standings/bracket recompute. *AC:* an admin correction updates all dependent standings and any resolved bracket slots.
 - **FR-F6** Optional sanity check on implausible shot counts per end (soft warning, not a hard block). *AC:* an end far above the plausible max prompts a confirmation but can still be saved. *(max bowls/player pending — see §8)*
-- **FR-F7** Walkover / no-show: the owner can award a fixture to the present team. *AC:* the awarded result yields the agreed points and shot values and appears in standings. *(walkover scoring pending — see §8)*
+- **FR-F7** Walkover / no-show: the owner can award a fixture to the present team as a win with a configurable set score (default 10–0). *AC:* the awarded result yields the win plus the configured shots, and those shots count toward shot-difference tiebreaks. *(Resolved — D-0005.)*
 - **FR-F8** A game can be marked abandoned by admin and given a manual outcome. *AC:* an abandoned game never blocks tournament progression.
 
 ### FR-G · Scheduling & rinks
@@ -111,7 +111,7 @@ A phone-first web app to run a one-day, teams-of-two lawn-bowls tournament for ~
 ### FR-I · Awards & voting
 - **FR-I1** Five awards ship pre-loaded, each typed **team** or **individual**: best dressed (team), bowl of the day (individual), cutest couple (team), most British (individual), most Kiwi (individual). *AC:* each renders the correct nominee type.
 - **FR-I2** Owner can add, edit, remove awards and set each award's type and description. *AC:* a custom award behaves identically to the pre-loaded ones.
-- **FR-I3** Nominees are generated automatically: all teams (team awards) or all players (individual awards), minus the voter's own team/self. *AC:* a voter never sees themselves/their own team as an option.
+- **FR-I3** Nominees are generated automatically: all teams for team awards, all players for individual awards. Team awards exclude the voter's whole team; individual awards exclude only the voter (a partner may be voted for). *AC:* a voter never sees their own team on a team award, nor themselves on an individual award, but can vote their partner for an individual award. *(Resolved — D-0008.)*
 - **FR-I4** Each voter has exactly 2 votes per award, which must go to 2 **different** nominees. *AC:* a third vote, or two votes on one nominee, is rejected server-side.
 - **FR-I5** Votes are changeable any time until voting is closed. *AC:* re-voting replaces a prior vote and the tally reflects it live.
 - **FR-I6** Live tally is visible to everyone during voting. *AC:* the standings of an award move as votes come in.
@@ -134,7 +134,7 @@ A phone-first web app to run a one-day, teams-of-two lawn-bowls tournament for ~
 
 - **NFR-1 · Cost:** runs on free tiers (Supabase + Vercel); only optional cost is a custom domain.
 - **NFR-2 · Realtime:** state changes propagate to other viewers within ~3s under normal conditions.
-- **NFR-3 · Resilience to poor signal:** score/vote submission tolerates flaky connectivity — optimistic UI, explicit "saved / not saved yet" state, and automatic retry. *(hardening level pending — see §8)*
+- **NFR-3 · Resilience to poor signal:** venue signal is expected to be patchy, so score/vote submission must tolerate flaky connectivity — optimistic UI, explicit "saved / not saved yet" state, automatic retry, and graceful fallback to on-demand fetch if realtime drops. *(Resolved — D-0007.)*
 - **NFR-4 · Authorization:** every mutating action is enforced server-side via Supabase Row Level Security; the UI hiding a control is never the only guard.
 - **NFR-5 · Accessibility:** phone-first, large tap targets, colour is never the only signal (icons/text too), works on older devices.
 - **NFR-6 · Simplicity of entry:** login should be frictionless for guests (e.g. QR code on the login card linking to the site).
@@ -158,15 +158,15 @@ Every FR/NFR with acceptance criteria must have at least one test whose name ref
 
 ## 8. Open decisions (pending host input)
 
-| ID | Question | Working default |
-|---|---|---|
-| OD-1 | Walkover/no-show scoring (FR-F7) | Win with a configurable set score (e.g. 10–0) |
-| OD-2 | Uneven groups vs equal games-per-team (FR-B4/FR-D1) | Allow uneven groups; show the spread |
-| OD-3 | Offline hardening level (NFR-3) | Build robust (assume patchy signal) |
-| OD-4 | Individual-award voting: block self only, or whole team? (FR-I3) | Block self only |
-| OD-5 | Award vote ties (FR-I8) | Co-winners; owner may break the tie |
-| OD-6 | Team lock point (FR-C7) | At knockout start |
-| OD-7 | Owner password recovery mechanism (FR-A6) | One-time recovery code at first run |
-| OD-8 | Sanity cap: max bowls per player for FR-F6 warning | 4 (standard pairs) → warn above 8/end |
+| ID | Question | Decision | Status |
+|---|---|---|---|
+| OD-1 | Walkover/no-show scoring (FR-F7) | Win with configurable set score, default 10–0 | ✓ resolved (D-0005) |
+| OD-2 | Uneven groups vs equal games-per-team (FR-B4/FR-D1) | Allow uneven groups; show the spread | ✓ resolved (D-0006) |
+| OD-3 | Offline hardening level (NFR-3) | Build robust — assume patchy signal | ✓ resolved (D-0007) |
+| OD-4 | Individual-award voting scope (FR-I3) | Block self only; partner allowed | ✓ resolved (D-0008) |
+| OD-5 | Award vote ties (FR-I8) | Co-winners; owner may break the tie | default (confirm later) |
+| OD-6 | Team lock point (FR-C7) | At knockout start | default (confirm later) |
+| OD-7 | Owner password recovery mechanism (FR-A6) | One-time recovery code at first run | default (confirm later) |
+| OD-8 | Sanity cap: max bowls per player for FR-F6 warning | 4 (standard pairs) → warn above 8/end | default (confirm later) |
 
 The background edge-case sweep will append additional items and refine these before build. Resolved decisions move into [decisions.md](decisions.md).
