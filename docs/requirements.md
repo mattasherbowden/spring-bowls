@@ -168,5 +168,7 @@ Every FR/NFR with acceptance criteria must have at least one test whose name ref
 | OD-6 | Team lock point (FR-C7) | At knockout start | default (confirm later) |
 | OD-7 | Owner password recovery mechanism (FR-A6) | One-time recovery code at first run | default (confirm later) |
 | OD-8 | Sanity cap: max bowls per player for FR-F6 warning | 4 (standard pairs) → warn above 8/end | default (confirm later) |
+| OD-9 | Mid-tournament team withdrawal — do already-played group games stand or void? | Played results stand; remaining games become walkovers | default (confirm later) |
+| OD-10 | Terminal group tiebreak when head-to-head is circular or >2 teams tie | Fewest shots against, then drawn lots (admin may run a bowl-off) | default (confirm later) |
 
 The background edge-case sweep will append additional items and refine these before build. Resolved decisions move into [decisions.md](decisions.md).

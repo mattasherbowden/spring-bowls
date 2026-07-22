@@ -2,6 +2,16 @@
 
 Short records of "why we chose X" — lightweight ADRs. Newest first.
 
+### D-0010 · Role lives in the database, enforced by RLS, propagates live
+- **Date:** 2026-07-22 · **Status:** accepted
+- **Decision:** The owner/admin/player role is stored in a DB table read by Row Level Security on every request — not baked into the JWT. Promotions/demotions take effect immediately with no re-login; the UI reacts via realtime with a "permissions changed" hint.
+- **Why:** The edge-case sweep flagged stale-role-in-JWT as a high-severity hole (a demoted admin keeping powers, or a promotion not taking effect on the day). DB-checked RLS keeps authorization server-side and instant.
+
+### D-0009 · Owner/admin creates all accounts — no self-registration
+- **Date:** 2026-07-22 · **Status:** accepted
+- **Decision:** Players do not self-register. The owner (and admins) create every account and assign team membership during setup. Score-entry and voting authorization bind to admin-set team membership, never a self-chosen name. Usernames are canonicalised (trim + case-fold) and unique; the behind-the-scenes email is derived from a stable id, never the raw username.
+- **Why:** Matches how Matt actually runs setup, and removes a cluster of high-severity auth risks the sweep found — name-squatting, entering scores for a team you're not on, and malformed/duplicate synthetic emails.
+
 ### D-0008 · Individual-award voting excludes only the voter (partner allowed)
 - **Date:** 2026-07-22 · **Status:** accepted
 - **Decision:** For individual awards (e.g. bowl of the day), a voter is blocked only from voting for themselves — they may vote for their own partner. Team awards still exclude the voter's whole team.
