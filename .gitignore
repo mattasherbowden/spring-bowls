@@ -1,0 +1,28 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+coverage/
+.stryker-tmp/
+reports/
+playwright-report/
+test-results/
+
+# env / secrets — never commit
+.env
+.env*.local
+.env.local
+.env.development
+.env.production
+
+# supabase local
+supabase/.temp/
+supabase/.branches/
+
+# os / editor
+.DS_Store
+*.log
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
