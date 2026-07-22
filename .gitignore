@@ -1,28 +1,48 @@
+# dependencies
 node_modules/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# build output
 .next/
 out/
 build/
 dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# testing / tooling
 coverage/
 .stryker-tmp/
 reports/
 playwright-report/
 test-results/
 
-# env / secrets — never commit
+# env / secrets — never commit real values
 .env
-.env*.local
 .env.local
+.env*.local
 .env.development
 .env.production
+!.env.example
 
 # supabase local
 supabase/.temp/
 supabase/.branches/
 
+# hosting
+.vercel
+
 # os / editor
 .DS_Store
+*.pem
 *.log
+npm-debug.log*
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
