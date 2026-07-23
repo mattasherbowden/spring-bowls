@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
 import { planTournament } from "@/lib/domain/planner";
+import { createTournament, type CreateState } from "./actions";
+import { ErrorNote } from "../_components/form-bits";
 
 function Slider({
   label,
@@ -102,7 +104,10 @@ export function SetupWizard() {
   const [advance, setAdvance] = useState<1 | 2>(2);
   const [preferredGroupSize, setGroupSize] = useState(4);
   const [start, setStart] = useState("10:00");
-  const [note, setNote] = useState<string | null>(null);
+  const [createState, createAction, creating] = useActionState(
+    createTournament,
+    {} as CreateState,
+  );
 
   const plan = planTournament({
     teams,
@@ -230,25 +235,27 @@ export function SetupWizard() {
         </p>
       </div>
 
-      <button
-        type="button"
-        onClick={() =>
-          setNote(
-            "Looks good! Wiring this up to actually create the tournament and add teams is the next slice — the plan above is exactly what it will build.",
-          )
-        }
-        className="w-full rounded-lg bg-brand px-4 py-3 text-base font-semibold text-white hover:bg-brand-dark"
-      >
-        Looks good — set up teams
-      </button>
-      {note && (
-        <p
-          role="status"
-          className="rounded-lg bg-brand/10 px-3 py-2 text-sm text-brand-dark"
+      <form action={createAction} className="space-y-3">
+        <input type="hidden" name="teamSize" value={teamSize} />
+        <input type="hidden" name="rinks" value={rinks} />
+        <input type="hidden" name="endsPerGame" value={endsPerGame} />
+        <input type="hidden" name="minutesPerEnd" value={minutesPerEnd} />
+        <input type="hidden" name="advance" value={advance} />
+        <input
+          type="hidden"
+          name="preferredGroupSize"
+          value={preferredGroupSize}
+        />
+        <input type="hidden" name="startTime" value={start} />
+        <button
+          type="submit"
+          disabled={creating}
+          className="w-full rounded-lg bg-brand px-4 py-3 text-base font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
         >
-          {note}
-        </p>
-      )}
+          {creating ? "Creating…" : "Create tournament — add teams"}
+        </button>
+        {createState.error && <ErrorNote>{createState.error}</ErrorNote>}
+      </form>
     </div>
   );
 }
