@@ -22,6 +22,12 @@ type FixtureLite = {
   winner_team_id: string | null;
 };
 
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
+}
+
 function Shell({ children }: { children: ReactNode }) {
   return (
     <main className="flex flex-1 flex-col items-center px-5 py-10">
@@ -128,12 +134,6 @@ export default async function Home() {
           teamId={teamId}
           firstName={firstName}
         />
-        <Link
-          href="/schedule"
-          className="mt-4 inline-block text-sm font-medium text-brand hover:text-brand-dark"
-        >
-          See the full schedule &amp; bracket →
-        </Link>
         <LogoutButton />
       </Shell>
     );
@@ -195,7 +195,6 @@ export default async function Home() {
             Your games will appear here once the tournament starts.
           </p>
         )}
-        <LogoutButton />
       </section>
     </Shell>
   );
@@ -249,6 +248,7 @@ async function PlayerHome({
     nameById.set(t.id, t.name ?? t.players.map((p) => p.display_name).join(" & "));
   if (myTeam) add(myTeam as TeamLite);
   groupTeams.forEach(add);
+  // Knockout opponents can be from other groups; fall back to "TBC".
   const nameOf = (id: string | null) => (id ? (nameById.get(id) ?? "TBC") : "TBC");
 
   const completed: Fixture[] = (groupFixturesData ?? [])
@@ -273,10 +273,24 @@ async function PlayerHome({
     groupTeams.map((t) => t.id),
     completed,
   );
+  const myRank = table.find((r) => r.teamId === teamId)?.rank ?? null;
 
-  const upNextId = myFixtures.find(
-    (f) => f.status !== "completed" && f.status !== "walkover",
-  )?.id;
+  const isDone = (f: FixtureLite) =>
+    f.status === "completed" || f.status === "walkover";
+  const played = myFixtures.filter(isDone);
+  const unplayed = myFixtures.filter((f) => !isDone(f));
+  const upNext = unplayed[0];
+  const coming = unplayed.slice(1);
+
+  const view = (f: FixtureLite) => {
+    const iAmA = f.team_a_id === teamId;
+    return {
+      oppId: iAmA ? f.team_b_id : f.team_a_id,
+      myShots: iAmA ? f.shots_a : f.shots_b,
+      oppShots: iAmA ? f.shots_b : f.shots_a,
+      won: f.winner_team_id === teamId,
+    };
+  };
 
   return (
     <>
@@ -287,63 +301,110 @@ async function PlayerHome({
         </p>
       </section>
 
-      <section className="mt-4 space-y-2">
-        <h3 className="text-sm font-medium text-foreground/60">Your games</h3>
-        {myFixtures.length === 0 ? (
-          <p className="rounded-2xl bg-white p-4 text-sm text-foreground/60 shadow-sm ring-1 ring-black/5">
-            The schedule hasn&apos;t been drawn yet — check back soon.
+      {upNext ? (
+        (() => {
+          const v = view(upNext);
+          const ready = !!v.oppId;
+          const inner = (
+            <div className="rounded-2xl bg-brand/10 p-5 ring-1 ring-brand/30">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide text-brand-dark">
+                  {upNext.stage === "knockout" ? "Knockout · next" : "Up next"}
+                </span>
+                {upNext.rink && (
+                  <span className="text-xs text-foreground/60">
+                    Rink {upNext.rink}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-2xl font-bold tracking-tight">
+                v {nameOf(v.oppId)}
+              </p>
+              {myRank && (
+                <p className="mt-1 text-sm text-foreground/70">
+                  You&apos;re currently {ordinal(myRank)} of {table.length} in
+                  Group {groupLabel}
+                </p>
+              )}
+              <p className="mt-3 text-sm font-medium text-brand-dark">
+                {ready
+                  ? "Tap to enter the score →"
+                  : "Waiting for your opponent to be decided"}
+              </p>
+            </div>
+          );
+          return ready ? (
+            <Link className="mt-4 block" href={`/fixture/${upNext.id}`}>
+              {inner}
+            </Link>
+          ) : (
+            <div className="mt-4">{inner}</div>
+          );
+        })()
+      ) : (
+        <div className="mt-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+          <p className="text-sm font-medium">
+            All your games are done
+            {myRank ? ` — ${ordinal(myRank)} in Group ${groupLabel}` : ""}.
           </p>
-        ) : (
-          myFixtures.map((f) => {
-            const iAmA = f.team_a_id === teamId;
-            const oppId = iAmA ? f.team_b_id : f.team_a_id;
-            const myShots = iAmA ? f.shots_a : f.shots_b;
-            const oppShots = iAmA ? f.shots_b : f.shots_a;
-            const done = f.status === "completed";
-            const won = done && f.winner_team_id === teamId;
-            const isNext = f.id === upNextId;
-            return (
-              <Link
-                key={f.id}
-                href={`/fixture/${f.id}`}
-                className={`block rounded-2xl p-4 shadow-sm ring-1 ${
-                  isNext ? "bg-brand/10 ring-brand/30" : "bg-white ring-black/5"
-                }`}
-              >
-                <div className="flex items-center justify-between">
+          <p className="mt-1 text-sm text-foreground/60">
+            Sit tight for the knockout and the ceremony.
+          </p>
+        </div>
+      )}
+
+      {coming.length > 0 && (
+        <section className="mt-6">
+          <h3 className="text-sm font-medium text-foreground/60">Coming up</h3>
+          <div className="mt-2 space-y-2">
+            {coming.map((f) => {
+              const v = view(f);
+              return (
+                <div
+                  key={f.id}
+                  className="rounded-2xl bg-white p-4 opacity-60 shadow-sm ring-1 ring-black/5"
+                >
                   <span className="text-xs font-medium uppercase tracking-wide text-foreground/50">
-                    {f.stage === "knockout" ? "Knockout · " : ""}
-                    {done
-                      ? won
-                        ? "Won"
-                        : "Lost"
-                      : isNext
-                        ? "Up next"
-                        : "Upcoming"}
+                    {f.stage === "knockout" ? "Knockout" : "Group game"}
                     {f.rink ? ` · Rink ${f.rink}` : ""}
                   </span>
-                  {done && (
-                    <span className="text-sm font-semibold">
-                      {myShots}–{oppShots}
-                    </span>
-                  )}
+                  <p className="mt-1 font-medium">v {nameOf(v.oppId)}</p>
                 </div>
-                <p className="mt-1 font-medium">v {nameOf(oppId)}</p>
-                {!done &&
-                  (oppId ? (
-                    <p className="mt-1 text-xs text-brand-dark">
-                      Tap to enter the score →
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-xs text-foreground/50">
-                      Waiting for your opponent to be decided
-                    </p>
-                  ))}
-              </Link>
-            );
-          })
-        )}
-      </section>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {played.length > 0 && (
+        <section className="mt-6">
+          <h3 className="text-sm font-medium text-foreground/60">Your results</h3>
+          <div className="mt-2 space-y-2">
+            {played.map((f) => {
+              const v = view(f);
+              return (
+                <Link
+                  key={f.id}
+                  href={`/fixture/${f.id}`}
+                  className="block rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 hover:opacity-80"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium uppercase tracking-wide text-foreground/50">
+                      {f.stage === "knockout" ? "Knockout · " : ""}
+                      {v.won ? "Won" : "Lost"}
+                      {f.rink ? ` · Rink ${f.rink}` : ""}
+                    </span>
+                    <span className="text-sm font-semibold">
+                      {v.myShots}–{v.oppShots}
+                    </span>
+                  </div>
+                  <p className="mt-1 font-medium">v {nameOf(v.oppId)}</p>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <section className="mt-6 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
         <h3 className="text-sm font-semibold">Group {groupLabel ?? "—"}</h3>
@@ -381,6 +442,21 @@ async function PlayerHome({
           </tbody>
         </table>
       </section>
+
+      <div className="mt-5 flex flex-wrap gap-2">
+        <Link
+          href="/schedule"
+          className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium hover:bg-black/[.03]"
+        >
+          See the draw
+        </Link>
+        <button
+          disabled
+          className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-foreground/40"
+        >
+          Vote for awards (soon)
+        </button>
+      </div>
     </>
   );
 }
