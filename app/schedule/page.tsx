@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { computeStandings } from "@/lib/domain/standings";
+import type { Fixture } from "@/lib/domain/types";
 
 type PlayerLite = { display_name: string; nationality: string | null };
 type TeamRow = {
@@ -17,6 +19,10 @@ type FixtureRow = {
   order_index: number;
   team_a_id: string | null;
   team_b_id: string | null;
+  status: string;
+  shots_a: number | null;
+  shots_b: number | null;
+  winner_team_id: string | null;
 };
 
 function flag(n: string | null): string {
@@ -32,7 +38,7 @@ export default async function SchedulePage() {
 
   const { data: tournament } = await supabase
     .from("tournament")
-    .select("id, name")
+    .select("id, name, advance")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
@@ -46,7 +52,9 @@ export default async function SchedulePage() {
 
   const { data: fixturesData } = await supabase
     .from("fixture")
-    .select("id, group_label, round, rink, order_index, team_a_id, team_b_id")
+    .select(
+      "id, group_label, round, rink, order_index, team_a_id, team_b_id, status, shots_a, shots_b, winner_team_id",
+    )
     .eq("tournament_id", tournament.id)
     .order("rink", { ascending: true })
     .order("order_index", { ascending: true });
@@ -57,6 +65,25 @@ export default async function SchedulePage() {
     if (!t) return "TBC";
     return t.name ?? t.players.map((p) => p.display_name).join(" & ");
   };
+
+  const completed: Fixture[] = fixtures
+    .filter(
+      (f) =>
+        f.status === "completed" &&
+        f.team_a_id &&
+        f.team_b_id &&
+        f.shots_a != null &&
+        f.shots_b != null,
+    )
+    .map((f) => ({
+      id: f.id,
+      teamA: f.team_a_id as string,
+      teamB: f.team_b_id as string,
+      outcome: {
+        kind: "played",
+        ends: [{ shotsA: f.shots_a as number, shotsB: f.shots_b as number }],
+      },
+    }));
 
   const groupLabels = [
     ...new Set(teams.map((t) => t.group_label).filter((l): l is string => !!l)),
@@ -87,28 +114,50 @@ export default async function SchedulePage() {
           </p>
         ) : (
           <div className="mt-6 space-y-6">
-            <section className="grid grid-cols-2 gap-3">
-              {groupLabels.map((label) => (
-                <div
+            {groupLabels.map((label) => {
+              const groupTeamIds = teams
+                .filter((t) => t.group_label === label)
+                .map((t) => t.id);
+              const table = computeStandings(groupTeamIds, completed);
+              return (
+                <section
                   key={label}
                   className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5"
                 >
                   <h2 className="text-sm font-semibold">Group {label}</h2>
-                  <ul className="mt-2 space-y-1 text-sm text-foreground/70">
-                    {teams
-                      .filter((t) => t.group_label === label)
-                      .map((t) => (
-                        <li key={t.id}>
-                          {t.name ??
-                            t.players
-                              .map((p) => `${p.display_name}${flag(p.nationality)}`)
-                              .join(" & ")}
-                        </li>
+                  <table className="mt-2 w-full text-sm">
+                    <thead>
+                      <tr className="text-xs text-foreground/50">
+                        <th className="text-left font-medium">Team</th>
+                        <th className="w-8 text-center font-medium">P</th>
+                        <th className="w-8 text-center font-medium">W</th>
+                        <th className="w-10 text-center font-medium">SD</th>
+                        <th className="w-8 text-center font-medium">Pts</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {table.map((row) => (
+                        <tr
+                          key={row.teamId}
+                          className={row.rank <= tournament.advance ? "bg-brand/5" : ""}
+                        >
+                          <td className="py-1">{teamName(row.teamId)}</td>
+                          <td className="text-center">{row.played}</td>
+                          <td className="text-center">{row.wins}</td>
+                          <td className="text-center">
+                            {row.shotDiff > 0 ? `+${row.shotDiff}` : row.shotDiff}
+                          </td>
+                          <td className="text-center font-medium">{row.points}</td>
+                        </tr>
                       ))}
-                  </ul>
-                </div>
-              ))}
-            </section>
+                    </tbody>
+                  </table>
+                  <p className="mt-1 text-xs text-foreground/40">
+                    Shaded = qualifying (top {tournament.advance})
+                  </p>
+                </section>
+              );
+            })}
 
             {rinks.map((rink) => (
               <section
@@ -116,24 +165,31 @@ export default async function SchedulePage() {
                 className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5"
               >
                 <h2 className="text-sm font-semibold">Rink {rink}</h2>
-                <ol className="mt-2 space-y-2">
+                <ol className="mt-1 divide-y divide-black/5">
                   {fixtures
                     .filter((f) => f.rink === rink)
-                    .map((f) => (
-                      <li
-                        key={f.id}
-                        className="flex items-center justify-between gap-2 text-sm"
-                      >
-                        <span>
-                          {teamName(f.team_a_id)}{" "}
-                          <span className="text-foreground/40">v</span>{" "}
-                          {teamName(f.team_b_id)}
-                        </span>
-                        <span className="shrink-0 text-xs text-foreground/50">
-                          Grp {f.group_label} · R{f.round}
-                        </span>
-                      </li>
-                    ))}
+                    .map((f) => {
+                      const done = f.status === "completed";
+                      return (
+                        <li key={f.id}>
+                          <Link
+                            href={`/fixture/${f.id}`}
+                            className="flex items-center justify-between gap-2 py-2 text-sm hover:opacity-70"
+                          >
+                            <span>
+                              {teamName(f.team_a_id)}{" "}
+                              <span className="font-medium text-foreground/50">
+                                {done ? `${f.shots_a}–${f.shots_b}` : "v"}
+                              </span>{" "}
+                              {teamName(f.team_b_id)}
+                            </span>
+                            <span className="shrink-0 text-xs text-foreground/50">
+                              {done ? "✓ done" : `Grp ${f.group_label} · R${f.round}`}
+                            </span>
+                          </Link>
+                        </li>
+                      );
+                    })}
                 </ol>
               </section>
             ))}

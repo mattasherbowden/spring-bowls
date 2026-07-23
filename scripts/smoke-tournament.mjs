@@ -112,6 +112,28 @@ try {
     .from("tournament")
     .insert({ name: "Hax", created_by: outsider.id });
   check("a non-owner cannot create a tournament (RLS)", !!insErr);
+
+  // Score entry: ends are readable by members but never writable by clients
+  // (only the submitScore server action writes, via the service role).
+  const { data: fx } = await admin
+    .from("fixture")
+    .insert({ tournament_id: tournamentId, team_a_id: team.id })
+    .select("id")
+    .single();
+  await admin
+    .from("fixture_end")
+    .insert({ fixture_id: fx.id, end_number: 1, shots_a: 3, shots_b: 1 });
+
+  const { data: mEnds } = await memberClient
+    .from("fixture_end")
+    .select("id")
+    .eq("fixture_id", fx.id);
+  check("a member can read fixture ends", (mEnds?.length ?? 0) === 1);
+
+  const { error: endWriteErr } = await memberClient
+    .from("fixture_end")
+    .insert({ fixture_id: fx.id, end_number: 2, shots_a: 9, shots_b: 0 });
+  check("a client cannot write a fixture end directly (RLS)", !!endWriteErr);
 } finally {
   if (tournamentId) await admin.from("tournament").delete().eq("id", tournamentId);
   for (const id of created)
