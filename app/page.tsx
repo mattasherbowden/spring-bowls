@@ -150,31 +150,49 @@ export default async function Home() {
           )}
         </h2>
         {profile?.is_owner ? (
-          <div className="mt-4">
-            <p className="text-sm text-foreground/70">
-              {tournament
-                ? "Manage your tournament — teams, schedule and scores."
-                : "Ready when you are — set up the day."}
-            </p>
-            <Link
-              href={tournament ? "/setup/teams" : "/setup"}
-              className="mt-3 inline-block rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark"
-            >
-              {tournament ? "Manage tournament" : "Set up the tournament"}
-            </Link>
-          </div>
+          tournament ? (
+            <div className="mt-4">
+              <p className="text-sm text-foreground/70">
+                <span className="font-medium">{tournament.name}</span> ·{" "}
+                {tournament.status === "setup" ? "setting up" : "live"}
+              </p>
+              <p className="mt-1 text-xs text-foreground/50">
+                {tournament.status === "setup"
+                  ? "Next: add your teams & logins, then generate the schedule."
+                  : "It's live — players can log in and enter their scores."}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link
+                  href="/setup/teams"
+                  className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark"
+                >
+                  Teams &amp; logins
+                </Link>
+                <Link
+                  href="/schedule"
+                  className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium hover:bg-black/[.03]"
+                >
+                  Schedule &amp; overview
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4">
+              <p className="text-sm text-foreground/70">
+                No tournament yet — start by choosing the format.
+              </p>
+              <Link
+                href="/setup"
+                className="mt-3 inline-block rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark"
+              >
+                Create a tournament
+              </Link>
+            </div>
+          )
         ) : (
           <p className="mt-4 text-sm text-foreground/70">
             Your games will appear here once the tournament starts.
           </p>
-        )}
-        {tournament && (
-          <Link
-            href="/schedule"
-            className="mt-4 inline-block text-sm font-medium text-brand hover:text-brand-dark"
-          >
-            View the full schedule →
-          </Link>
         )}
         <LogoutButton />
       </section>
