@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { computeStandings } from "@/lib/domain/standings";
+import { buildBracket } from "@/lib/domain/bracket";
 import type { Fixture } from "@/lib/domain/types";
 
 type PlayerLite = { display_name: string; nationality: string | null };
@@ -27,6 +28,12 @@ type FixtureRow = {
 
 function flag(n: string | null): string {
   return n === "brit" ? " 🇬🇧" : n === "kiwi" ? " 🥝" : "";
+}
+
+function slotText(s: string | null): string {
+  if (!s) return "—";
+  if (s.startsWith("W:")) return `Winner ${s.slice(2)}`;
+  return s;
 }
 
 export default async function SchedulePage() {
@@ -91,6 +98,20 @@ export default async function SchedulePage() {
   const rinks = [
     ...new Set(fixtures.map((f) => f.rink).filter((r): r is number => r != null)),
   ].sort((a, b) => a - b);
+
+  const groupSize = new Map<string, number>();
+  for (const t of teams) {
+    if (t.group_label) {
+      groupSize.set(t.group_label, (groupSize.get(t.group_label) ?? 0) + 1);
+    }
+  }
+  const qualifierLabels: string[] = [];
+  for (let pos = 1; pos <= tournament.advance; pos++) {
+    for (const g of groupLabels) {
+      if ((groupSize.get(g) ?? 0) >= pos) qualifierLabels.push(`${g}${pos}`);
+    }
+  }
+  const bracket = buildBracket(qualifierLabels);
 
   return (
     <main className="flex flex-1 flex-col items-center px-5 py-10">
@@ -158,6 +179,43 @@ export default async function SchedulePage() {
                 </section>
               );
             })}
+
+            {bracket.length > 0 && (
+              <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+                <h2 className="text-sm font-semibold">Knockout draw</h2>
+                <p className="mt-1 text-xs text-foreground/50">
+                  Projected from the groups — &ldquo;A1&rdquo; is the winner of
+                  Group A, &ldquo;B2&rdquo; the runner-up of Group B. Real teams
+                  lock in as the groups finish.
+                </p>
+                <div className="mt-3 overflow-x-auto">
+                  <div className="flex gap-4">
+                    {bracket.map((round) => (
+                      <div
+                        key={round.name}
+                        className="flex min-w-[9rem] flex-col justify-around gap-3"
+                      >
+                        <h3 className="text-center text-xs font-semibold text-foreground/60">
+                          {round.name}
+                        </h3>
+                        {round.matches.map((m) => (
+                          <div
+                            key={m.id}
+                            className="rounded-lg border border-black/10 p-2 text-xs"
+                          >
+                            <div className="truncate">{slotText(m.a)}</div>
+                            <div className="my-0.5 text-center text-foreground/30">
+                              v
+                            </div>
+                            <div className="truncate">{slotText(m.b)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
 
             {rinks.map((rink) => (
               <section
