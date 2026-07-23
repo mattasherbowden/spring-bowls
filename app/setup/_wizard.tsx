@@ -233,6 +233,18 @@ export function SetupWizard() {
         <p className="mt-4 text-xs text-foreground/50">
           A rough budget — deciders, breaks and slow games add slack.
         </p>
+        {plan.warnings.length > 0 && (
+          <ul className="mt-3 space-y-1">
+            {plan.warnings.map((w) => (
+              <li
+                key={w}
+                className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800"
+              >
+                {w}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <form action={createAction} className="space-y-3">

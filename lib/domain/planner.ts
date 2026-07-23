@@ -25,6 +25,7 @@ export interface TournamentPlan {
   headcount: number;
   gameMinutes: number;
   estMinutes: number;
+  warnings: string[];
 }
 
 /**
@@ -99,6 +100,24 @@ export function planTournament(input: PlanInput): TournamentPlan {
   const groupWaves = Math.ceil(groupGames / rinks) || 0;
   const estMinutes = (groupWaves + knockoutWaves) * gameMinutes;
 
+  const warnings: string[] = [];
+  if (teams >= 2 && groupCount === 1) {
+    warnings.push(
+      `Just one group — everyone plays everyone, then the top ${input.advance} go straight through.`,
+    );
+  }
+  if (groupCount > 1 && Math.min(...groups) < 3) {
+    warnings.push(
+      `Some groups have only ${Math.min(...groups)} teams, so those teams play very few games.`,
+    );
+  }
+  if (teams > 0 && qualifiers >= teams) {
+    warnings.push("Everyone qualifies — the group stage won't knock anyone out.");
+  }
+  if (qualifiers > 0 && qualifiers < 2) {
+    warnings.push("Too few teams to run a knockout round.");
+  }
+
   return {
     groups,
     groupCount,
@@ -112,5 +131,6 @@ export function planTournament(input: PlanInput): TournamentPlan {
     headcount: teams * teamSize,
     gameMinutes,
     estMinutes,
+    warnings,
   };
 }

@@ -68,4 +68,14 @@ describe("planTournament", () => {
     const many = planTournament({ ...base, rinks: 6 });
     expect(many.estMinutes).toBeLessThan(few.estMinutes);
   });
+
+  it("warns about a degenerate single-group draw", () => {
+    const p = planTournament({ ...base, teams: 5, preferredGroupSize: 4 });
+    expect(p.groups).toEqual([5]);
+    expect(p.warnings.some((w) => /one group/i.test(w))).toBe(true);
+  });
+
+  it("a healthy 12-team plan has no warnings", () => {
+    expect(planTournament(base).warnings).toEqual([]);
+  });
 });
