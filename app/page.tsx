@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { LoginForm } from "./_components/login-form";
 import { CreateOwnerForm } from "./_components/create-owner-form";
@@ -94,11 +95,24 @@ function LoggedIn({ profile }: { profile: Profile }) {
           </span>
         )}
       </p>
-      <p className="mt-4 text-sm text-foreground/70">
-        {profile.is_owner
-          ? "Next we will build your tournament setup here — teams, rinks and the schedule."
-          : "Your next fixture and scores will appear here once the tournament starts."}
-      </p>
+      {profile.is_owner ? (
+        <div className="mt-4">
+          <p className="text-sm text-foreground/70">
+            Ready when you are — set the teams, rinks and format for the day.
+          </p>
+          <Link
+            href="/setup"
+            className="mt-3 inline-block rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark"
+          >
+            Set up the tournament
+          </Link>
+        </div>
+      ) : (
+        <p className="mt-4 text-sm text-foreground/70">
+          Your next fixture and scores will appear here once the tournament
+          starts.
+        </p>
+      )}
       <form action={logout} className="mt-5">
         <button className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium hover:bg-black/[.03]">
           Log out
