@@ -9,6 +9,14 @@ type TeamRow = {
   players: { display_name: string }[];
 };
 
+function koLabel(code: string | null): string {
+  if (!code) return "Knockout";
+  if (code.startsWith("QF")) return "Quarter-final";
+  if (code.startsWith("SF")) return "Semi-final";
+  if (code.startsWith("R")) return "Knockout";
+  return "Final";
+}
+
 export default async function FixturePage({
   params,
 }: {
@@ -24,7 +32,7 @@ export default async function FixturePage({
   const { data: fixture } = await supabase
     .from("fixture")
     .select(
-      "id, tournament_id, group_label, round, rink, team_a_id, team_b_id, status, shots_a, shots_b, winner_team_id, entered_by",
+      "id, tournament_id, stage, match_code, group_label, round, rink, team_a_id, team_b_id, status, shots_a, shots_b, winner_team_id, entered_by",
     )
     .eq("id", id)
     .maybeSingle();
@@ -78,8 +86,10 @@ export default async function FixturePage({
             ← schedule
           </Link>
           <p className="mt-2 text-xs font-medium uppercase tracking-wide text-foreground/50">
-            Group {fixture.group_label} · Round {fixture.round} · Rink{" "}
-            {fixture.rink}
+            {fixture.stage === "knockout"
+              ? koLabel(fixture.match_code)
+              : `Group ${fixture.group_label} · Round ${fixture.round}`}{" "}
+            · Rink {fixture.rink}
           </p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight">
             {teamName(fixture.team_a_id)}{" "}
