@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { TeamBuilder } from "./_builder";
 import { GenerateScheduleButton } from "./_generate";
+import { ResetButton } from "./_reset";
 
 export default async function TeamsPage() {
   const supabase = await createClient();
@@ -73,6 +74,10 @@ export default async function TeamsPage() {
               View the schedule
             </Link>
           )}
+        </div>
+
+        <div className="mt-8 border-t border-black/5 pt-5">
+          <ResetButton />
         </div>
       </div>
     </main>

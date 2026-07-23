@@ -67,8 +67,9 @@ export function TeamBuilder({
           </p>
         ) : (
           <p className="mt-3 text-xs font-medium text-brand-dark">
-            All {teams.length} teams in — you can still add or edit. Generating
-            the schedule is the next step (coming soon).
+            {teams.length === plannedTeams
+              ? `All ${plannedTeams} teams added — you can still add or edit.`
+              : `${teams.length} teams added (${teams.length - plannedTeams} over the planned ${plannedTeams}) — you can still edit.`}
           </p>
         )}
       </div>
@@ -145,7 +146,9 @@ export function TeamBuilder({
       ) : (
         <div className="rounded-2xl bg-brand/5 p-5 text-center ring-1 ring-brand/15">
           <p className="text-sm font-medium text-brand-dark">
-            All {plannedTeams} teams are in 🎉
+            {teams.length === plannedTeams
+              ? `All ${plannedTeams} teams are in 🎉`
+              : `${teams.length} teams added 🎉`}
           </p>
           <p className="mt-1 text-xs text-foreground/60">
             Generating the schedule is the next step.

@@ -255,3 +255,38 @@ export async function generateSchedule(
   await admin.from("tournament").update({ status: "live" }).eq("id", t.id);
   redirect("/schedule");
 }
+
+// ---------- reset: delete the tournament, its teams, logins and schedule ----------
+
+export async function resetTournament(
+  _prev: GenerateState,
+  _fd: FormData,
+): Promise<GenerateState> {
+  const ownerId = await currentOwnerId();
+  if (!ownerId) return { error: "Only the owner can reset the tournament." };
+
+  const admin = createAdminClient();
+  const { data: t } = await admin
+    .from("tournament")
+    .select("id")
+    .neq("status", "archived")
+    .limit(1)
+    .maybeSingle();
+  if (!t) redirect("/setup");
+
+  // Grab the player accounts before the tournament (and its player rows) go.
+  const { data: players } = await admin
+    .from("player")
+    .select("profile_id")
+    .eq("tournament_id", t.id);
+
+  // Deleting the tournament cascades its teams, players and fixtures.
+  await admin.from("tournament").delete().eq("id", t.id);
+
+  // Delete each player's auth account (frees the username); keep the owner.
+  for (const p of players ?? []) {
+    if (p.profile_id !== ownerId) await deleteAuthUser(p.profile_id);
+  }
+
+  redirect("/setup");
+}
