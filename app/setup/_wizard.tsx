@@ -236,6 +236,7 @@ export function SetupWizard() {
       </div>
 
       <form action={createAction} className="space-y-3">
+        <input type="hidden" name="plannedTeams" value={teams} />
         <input type="hidden" name="teamSize" value={teamSize} />
         <input type="hidden" name="rinks" value={rinks} />
         <input type="hidden" name="endsPerGame" value={endsPerGame} />

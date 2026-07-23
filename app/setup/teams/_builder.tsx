@@ -18,9 +18,11 @@ function flag(nat: string | null): string {
 
 export function TeamBuilder({
   teamSize,
+  plannedTeams,
   teams,
 }: {
   teamSize: number;
+  plannedTeams: number;
   teams: TeamRow[];
 }) {
   const [state, action, pending] = useActionState(addTeam, {} as AddTeamState);
@@ -30,7 +32,9 @@ export function TeamBuilder({
       <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
         <div className="flex items-baseline justify-between">
           <h2 className="text-lg font-semibold">Teams</h2>
-          <span className="text-sm text-foreground/50">{teams.length} added</span>
+          <span className="text-sm text-foreground/50">
+            {teams.length} of {plannedTeams} added
+          </span>
         </div>
         {teams.length === 0 ? (
           <p className="mt-2 text-sm text-foreground/60">
@@ -54,6 +58,16 @@ export function TeamBuilder({
               </li>
             ))}
           </ul>
+        )}
+        {teams.length < plannedTeams ? (
+          <p className="mt-3 text-xs text-foreground/50">
+            {plannedTeams - teams.length} more to go.
+          </p>
+        ) : (
+          <p className="mt-3 text-xs font-medium text-brand-dark">
+            All {teams.length} teams in — you can still add or edit. Generating
+            the schedule is the next step (coming soon).
+          </p>
         )}
       </div>
 

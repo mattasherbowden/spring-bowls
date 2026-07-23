@@ -19,7 +19,7 @@ export default async function TeamsPage() {
 
   const { data: tournament } = await supabase
     .from("tournament")
-    .select("id, name, team_size")
+    .select("id, name, team_size, planned_teams")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
@@ -54,7 +54,11 @@ export default async function TeamsPage() {
         </header>
 
         <div className="mt-6">
-          <TeamBuilder teamSize={tournament.team_size} teams={teams ?? []} />
+          <TeamBuilder
+            teamSize={tournament.team_size}
+            plannedTeams={tournament.planned_teams}
+            teams={teams ?? []}
+          />
         </div>
       </div>
     </main>

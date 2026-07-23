@@ -57,6 +57,7 @@ export async function createTournament(
     minutes_per_end: intField(fd, "minutesPerEnd", 12),
     advance: intField(fd, "advance", 2),
     preferred_group_size: intField(fd, "preferredGroupSize", 4),
+    planned_teams: intField(fd, "plannedTeams", 12),
     start_time: String(fd.get("startTime") || "") || null,
     created_by: ownerId,
   });
@@ -148,7 +149,11 @@ export async function addTeam(
         password,
         email_confirm: true,
       });
-      if (cErr || !created.user) throw new Error("createUser failed");
+      if (cErr || !created.user) {
+        throw new Error(
+          `a login for ${p.displayName} (${cErr?.message ?? "unknown error"})`,
+        );
+      }
       createdUserIds.push(created.user.id);
 
       const { error: profErr } = await admin.from("profile").insert({
@@ -157,7 +162,9 @@ export async function addTeam(
         display_name: p.displayName,
         is_owner: false,
       });
-      if (profErr) throw new Error("profile insert failed");
+      if (profErr) {
+        throw new Error(`a profile for ${p.displayName} (${profErr.message})`);
+      }
 
       const { error: playerErr } = await admin.from("player").insert({
         tournament_id: tournament.id,
@@ -167,15 +174,18 @@ export async function addTeam(
         nationality: p.nationality,
         role: "player",
       });
-      if (playerErr) throw new Error("player insert failed");
+      if (playerErr) {
+        throw new Error(`the roster for ${p.displayName} (${playerErr.message})`);
+      }
 
       output.push({ displayName: p.displayName, username, password });
     }
-  } catch {
+  } catch (e) {
     for (const uid of createdUserIds) await admin.auth.admin.deleteUser(uid);
     await admin.from("team").delete().eq("id", team.id);
+    const reason = e instanceof Error ? e.message : "an unknown error";
     return {
-      error: "Could not create the logins — nothing was saved. Try again.",
+      error: `Could not create ${reason}. Nothing was saved — please try again.`,
     };
   }
 
