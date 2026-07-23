@@ -10,6 +10,7 @@ import type { Fixture } from "@/lib/domain/types";
 type TeamLite = { id: string; name: string | null; players: { display_name: string }[] };
 type FixtureLite = {
   id: string;
+  stage: string;
   round: number | null;
   rink: number | null;
   order_index: number;
@@ -230,7 +231,7 @@ async function PlayerHome({
   const { data: myFixturesData } = await supabase
     .from("fixture")
     .select(
-      "id, round, rink, order_index, team_a_id, team_b_id, status, shots_a, shots_b, winner_team_id",
+      "id, stage, round, rink, order_index, team_a_id, team_b_id, status, shots_a, shots_b, winner_team_id",
     )
     .eq("tournament_id", tournamentId)
     .or(`team_a_id.eq.${teamId},team_b_id.eq.${teamId}`)
@@ -311,14 +312,15 @@ async function PlayerHome({
               >
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium uppercase tracking-wide text-foreground/50">
+                    {f.stage === "knockout" ? "Knockout · " : ""}
                     {done
                       ? won
                         ? "Won"
                         : "Lost"
                       : isNext
                         ? "Up next"
-                        : "Upcoming"}{" "}
-                    · Rink {f.rink}
+                        : "Upcoming"}
+                    {f.rink ? ` · Rink ${f.rink}` : ""}
                   </span>
                   {done && (
                     <span className="text-sm font-semibold">
@@ -327,11 +329,16 @@ async function PlayerHome({
                   )}
                 </div>
                 <p className="mt-1 font-medium">v {nameOf(oppId)}</p>
-                {!done && (
-                  <p className="mt-1 text-xs text-brand-dark">
-                    Tap to enter the score →
-                  </p>
-                )}
+                {!done &&
+                  (oppId ? (
+                    <p className="mt-1 text-xs text-brand-dark">
+                      Tap to enter the score →
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-foreground/50">
+                      Waiting for your opponent to be decided
+                    </p>
+                  ))}
               </Link>
             );
           })

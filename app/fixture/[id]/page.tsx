@@ -65,6 +65,7 @@ export default async function FixturePage({
     !!me && (me.team_id === fixture.team_a_id || me.team_id === fixture.team_b_id);
   const isAdmin = !!prof?.is_owner || me?.role === "admin";
   const done = fixture.status === "completed" || fixture.status === "walkover";
+  const bothSet = !!fixture.team_a_id && !!fixture.team_b_id;
 
   return (
     <main className="flex flex-1 flex-col items-center px-5 py-10">
@@ -102,6 +103,10 @@ export default async function FixturePage({
             )}
             {isAdmin && <UnlockButton fixtureId={fixture.id} />}
           </div>
+        ) : !bothSet ? (
+          <p className="mt-6 text-center text-sm text-foreground/60">
+            This game is waiting for both teams to be decided.
+          </p>
         ) : isMember || isAdmin ? (
           <ScoreForm
             fixtureId={fixture.id}

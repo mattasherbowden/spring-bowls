@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fixtureResult } from "@/lib/domain/fixture";
+import { resolveKnockout } from "@/lib/server/knockout";
 import type { EndScore } from "@/lib/domain/types";
 
 export type ScoreState = { error?: string };
@@ -121,6 +122,9 @@ export async function submitScore(
       shots_b: e.shotsB,
     })),
   );
+
+  // Fill in any knockout slots this result now decides.
+  await resolveKnockout(admin, fixture.tournament_id);
 
   revalidatePath("/schedule");
   redirect("/schedule");

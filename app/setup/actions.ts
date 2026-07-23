@@ -9,6 +9,7 @@ import { createAuthUser, deleteAuthUser } from "@/lib/supabase/auth-admin";
 import { suggestUsername, generatePassword } from "@/lib/domain/credentials";
 import { splitIntoGroups } from "@/lib/domain/planner";
 import { drawGroups, buildGroupSchedule } from "@/lib/domain/schedule";
+import { resolveKnockout } from "@/lib/server/knockout";
 
 const EMAIL_DOMAIN = "springbowls.local";
 
@@ -253,6 +254,23 @@ export async function generateSchedule(
   if (fErr) return { error: `Could not save the schedule: ${fErr.message}` };
 
   await admin.from("tournament").update({ status: "live" }).eq("id", t.id);
+  await resolveKnockout(admin, t.id);
+  redirect("/schedule");
+}
+
+export async function refreshKnockout(): Promise<void> {
+  const ownerId = await currentOwnerId();
+  if (!ownerId) return;
+  const admin = createAdminClient();
+  const { data: t } = await admin
+    .from("tournament")
+    .select("id")
+    .neq("status", "archived")
+    .limit(1)
+    .maybeSingle();
+  if (!t) return;
+  await resolveKnockout(admin, t.id);
+  revalidatePath("/schedule");
   redirect("/schedule");
 }
 
