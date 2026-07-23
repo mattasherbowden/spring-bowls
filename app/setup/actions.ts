@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createAuthUser, deleteAuthUser } from "@/lib/supabase/auth-admin";
 import { suggestUsername, generatePassword } from "@/lib/domain/credentials";
 
 const EMAIL_DOMAIN = "springbowls.local";
@@ -144,20 +145,14 @@ export async function addTeam(
       const password = generatePassword();
       const email = `${username.toLowerCase()}@${EMAIL_DOMAIN}`;
 
-      const { data: created, error: cErr } = await admin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-      });
-      if (cErr || !created.user) {
-        throw new Error(
-          `a login for ${p.displayName} (${cErr?.message ?? "unknown error"})`,
-        );
+      const created = await createAuthUser(email, password);
+      if ("error" in created) {
+        throw new Error(`a login for ${p.displayName} (${created.error})`);
       }
-      createdUserIds.push(created.user.id);
+      createdUserIds.push(created.id);
 
       const { error: profErr } = await admin.from("profile").insert({
-        id: created.user.id,
+        id: created.id,
         username,
         display_name: p.displayName,
         is_owner: false,
@@ -169,7 +164,7 @@ export async function addTeam(
       const { error: playerErr } = await admin.from("player").insert({
         tournament_id: tournament.id,
         team_id: team.id,
-        profile_id: created.user.id,
+        profile_id: created.id,
         display_name: p.displayName,
         nationality: p.nationality,
         role: "player",
@@ -181,7 +176,7 @@ export async function addTeam(
       output.push({ displayName: p.displayName, username, password });
     }
   } catch (e) {
-    for (const uid of createdUserIds) await admin.auth.admin.deleteUser(uid);
+    for (const uid of createdUserIds) await deleteAuthUser(uid);
     await admin.from("team").delete().eq("id", team.id);
     const reason = e instanceof Error ? e.message : "an unknown error";
     return {

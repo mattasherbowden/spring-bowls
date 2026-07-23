@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { addTeam, type AddTeamState } from "../actions";
 import { ErrorNote } from "../../_components/form-bits";
 
@@ -26,6 +26,8 @@ export function TeamBuilder({
   teams: TeamRow[];
 }) {
   const [state, action, pending] = useActionState(addTeam, {} as AddTeamState);
+  const [addExtra, setAddExtra] = useState(false);
+  const atLimit = teams.length >= plannedTeams;
 
   return (
     <div className="space-y-5">
@@ -100,10 +102,11 @@ export function TeamBuilder({
         </div>
       )}
 
-      <form
-        action={action}
-        className="space-y-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5"
-      >
+      {!atLimit || addExtra ? (
+        <form
+          action={action}
+          className="space-y-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5"
+        >
         <h2 className="text-lg font-semibold">Add a team</h2>
         <label className="block">
           <span className="text-sm font-medium">Team name (optional)</span>
@@ -138,7 +141,24 @@ export function TeamBuilder({
           {pending ? "Creating logins…" : "Add team"}
         </button>
         {state.error && <ErrorNote>{state.error}</ErrorNote>}
-      </form>
+        </form>
+      ) : (
+        <div className="rounded-2xl bg-brand/5 p-5 text-center ring-1 ring-brand/15">
+          <p className="text-sm font-medium text-brand-dark">
+            All {plannedTeams} teams are in 🎉
+          </p>
+          <p className="mt-1 text-xs text-foreground/60">
+            Generating the schedule is the next step.
+          </p>
+          <button
+            type="button"
+            onClick={() => setAddExtra(true)}
+            className="mt-3 text-sm font-medium text-brand hover:text-brand-dark"
+          >
+            + Add an extra team anyway
+          </button>
+        </div>
+      )}
     </div>
   );
 }

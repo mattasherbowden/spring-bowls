@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createAuthUser, deleteAuthUser } from "@/lib/supabase/auth-admin";
 
 const USERNAME_RE = /^[A-Za-z0-9._-]{2,32}$/;
 const EMAIL_DOMAIN = "springbowls.local";
@@ -20,7 +21,6 @@ function synthEmail(username: string): string {
 
 export type AuthState = {
   error?: string;
-  // Echoed back on error so the form can re-fill them (never the password).
   values?: { username?: string; displayName?: string };
 };
 
@@ -73,8 +73,6 @@ export async function createOwner(
   }
 
   const admin = createAdminClient();
-
-  // Only ever one owner.
   const { count } = await admin
     .from("profile")
     .select("*", { count: "exact", head: true })
@@ -83,31 +81,22 @@ export async function createOwner(
     return { error: "An owner already exists — please log in instead.", values };
   }
 
-  // Create the auth user server-side (no email confirmation flow).
-  const { data: created, error: createErr } =
-    await admin.auth.admin.createUser({
-      email: synthEmail(username),
-      password,
-      email_confirm: true,
-    });
-  if (createErr || !created.user) {
-    return { error: "That username is already taken.", values };
+  const created = await createAuthUser(synthEmail(username), password);
+  if ("error" in created) {
+    return { error: `Could not create the account: ${created.error}`, values };
   }
 
-  // Create the owner profile (service role bypasses RLS).
   const { error: profileErr } = await admin.from("profile").insert({
-    id: created.user.id,
+    id: created.id,
     username,
     display_name: displayName,
     is_owner: true,
   });
   if (profileErr) {
-    // Roll back the orphaned auth user so the username can be reused.
-    await admin.auth.admin.deleteUser(created.user.id);
+    await deleteAuthUser(created.id);
     return { error: "That username is already taken.", values };
   }
 
-  // Sign the new owner in, then land on the home screen.
   const supabase = await createClient();
   await supabase.auth.signInWithPassword({
     email: synthEmail(username),

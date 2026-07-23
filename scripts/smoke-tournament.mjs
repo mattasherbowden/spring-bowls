@@ -34,16 +34,21 @@ const check = (name, ok) => {
 async function makeUser(tag) {
   const email = `smoke_${tag}_${suffix}@springbowls.local`;
   const password = "smoke-password-123";
-  const { data } = await admin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
+  const res = await fetch(`${url}/auth/v1/admin/users`, {
+    method: "POST",
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, password, email_confirm: true }),
   });
-  created.push(data.user.id);
+  const body = await res.json();
+  created.push(body.id);
   await admin
     .from("profile")
-    .insert({ id: data.user.id, username: `smoke_${tag}_${suffix}`, display_name: tag });
-  return { id: data.user.id, email, password };
+    .insert({ id: body.id, username: `smoke_${tag}_${suffix}`, display_name: tag });
+  return { id: body.id, email, password };
 }
 
 async function signedInClient(email, password) {
@@ -109,7 +114,14 @@ try {
   check("a non-owner cannot create a tournament (RLS)", !!insErr);
 } finally {
   if (tournamentId) await admin.from("tournament").delete().eq("id", tournamentId);
-  for (const id of created) await admin.auth.admin.deleteUser(id);
+  for (const id of created)
+    await fetch(`${url}/auth/v1/admin/users/${id}`, {
+      method: "DELETE",
+      headers: {
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+    });
   console.log("cleaned up");
 }
 
