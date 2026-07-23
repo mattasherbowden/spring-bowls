@@ -18,7 +18,11 @@ function synthEmail(username: string): string {
   return `${canonical(username)}@${EMAIL_DOMAIN}`;
 }
 
-export type AuthState = { error?: string };
+export type AuthState = {
+  error?: string;
+  // Echoed back on error so the form can re-fill them (never the password).
+  values?: { username?: string; displayName?: string };
+};
 
 export async function login(
   _prev: AuthState,
@@ -27,7 +31,7 @@ export async function login(
   const username = String(formData.get("username") ?? "");
   const password = String(formData.get("password") ?? "");
   if (!username.trim() || !password) {
-    return { error: "Enter your username and password." };
+    return { error: "Enter your username and password.", values: { username } };
   }
 
   const supabase = await createClient();
@@ -36,7 +40,10 @@ export async function login(
     password,
   });
   if (error) {
-    return { error: "That username and password do not match." };
+    return {
+      error: "That username and password do not match.",
+      values: { username },
+    };
   }
   redirect("/");
 }
@@ -48,16 +55,21 @@ export async function createOwner(
   const username = String(formData.get("username") ?? "").trim();
   const displayName = String(formData.get("displayName") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  const values = { username, displayName };
 
   if (!USERNAME_RE.test(username)) {
     return {
       error:
         "Username must be 2–32 characters: letters, numbers, dot, dash or underscore.",
+      values,
     };
   }
-  if (displayName.length < 1) return { error: "Enter your name." };
+  if (displayName.length < 1) return { error: "Enter your name.", values };
   if (password.length < MIN_PASSWORD) {
-    return { error: `Password must be at least ${MIN_PASSWORD} characters.` };
+    return {
+      error: `Password must be at least ${MIN_PASSWORD} characters.`,
+      values,
+    };
   }
 
   const admin = createAdminClient();
@@ -68,7 +80,7 @@ export async function createOwner(
     .select("*", { count: "exact", head: true })
     .eq("is_owner", true);
   if ((count ?? 0) > 0) {
-    return { error: "An owner already exists — please log in instead." };
+    return { error: "An owner already exists — please log in instead.", values };
   }
 
   // Create the auth user server-side (no email confirmation flow).
@@ -79,7 +91,7 @@ export async function createOwner(
       email_confirm: true,
     });
   if (createErr || !created.user) {
-    return { error: "That username is already taken." };
+    return { error: "That username is already taken.", values };
   }
 
   // Create the owner profile (service role bypasses RLS).
@@ -92,7 +104,7 @@ export async function createOwner(
   if (profileErr) {
     // Roll back the orphaned auth user so the username can be reused.
     await admin.auth.admin.deleteUser(created.user.id);
-    return { error: "That username is already taken." };
+    return { error: "That username is already taken.", values };
   }
 
   // Sign the new owner in, then land on the home screen.

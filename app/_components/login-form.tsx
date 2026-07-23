@@ -11,7 +11,14 @@ export function LoginForm() {
 
   return (
     <form action={action} className="mt-4 flex flex-col gap-4">
-      <Field id="username" label="Username" type="text" username placeholder="e.g. will" />
+      <Field
+        id="username"
+        label="Username"
+        type="text"
+        username
+        placeholder="e.g. will"
+        defaultValue={state.values?.username}
+      />
       <Field id="password" label="Password" type="password" placeholder="••••••••" />
       <SubmitButton pending={pending}>
         {pending ? "Logging in…" : "Log in"}

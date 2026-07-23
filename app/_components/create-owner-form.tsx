@@ -11,7 +11,13 @@ export function CreateOwnerForm() {
 
   return (
     <form action={action} className="mt-4 flex flex-col gap-4">
-      <Field id="displayName" label="Your name" type="text" placeholder="e.g. Matt" />
+      <Field
+        id="displayName"
+        label="Your name"
+        type="text"
+        placeholder="e.g. Matt"
+        defaultValue={state.values?.displayName}
+      />
       <Field
         id="username"
         label="Username"
@@ -19,6 +25,7 @@ export function CreateOwnerForm() {
         username
         placeholder="e.g. matt"
         hint="2–32 characters: letters, numbers, dot, dash or underscore."
+        defaultValue={state.values?.username}
       />
       <Field
         id="password"

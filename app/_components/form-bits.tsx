@@ -9,6 +9,7 @@ export function Field({
   placeholder,
   username,
   hint,
+  defaultValue,
 }: {
   id: string;
   label: string;
@@ -16,6 +17,7 @@ export function Field({
   placeholder?: string;
   username?: boolean;
   hint?: string;
+  defaultValue?: string;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -26,6 +28,7 @@ export function Field({
         id={id}
         name={id}
         type={type}
+        defaultValue={defaultValue}
         placeholder={placeholder}
         autoCapitalize={username ? "none" : undefined}
         autoCorrect={username ? "off" : undefined}
