@@ -113,6 +113,12 @@ function LoggedIn({ profile }: { profile: Profile }) {
           starts.
         </p>
       )}
+      <Link
+        href="/schedule"
+        className="mt-4 inline-block text-sm font-medium text-brand hover:text-brand-dark"
+      >
+        View the schedule →
+      </Link>
       <form action={logout} className="mt-5">
         <button className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium hover:bg-black/[.03]">
           Log out

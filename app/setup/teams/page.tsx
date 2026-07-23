@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { TeamBuilder } from "./_builder";
+import { GenerateScheduleButton } from "./_generate";
 
 export default async function TeamsPage() {
   const supabase = await createClient();
@@ -19,7 +20,7 @@ export default async function TeamsPage() {
 
   const { data: tournament } = await supabase
     .from("tournament")
-    .select("id, name, team_size, planned_teams")
+    .select("id, name, team_size, planned_teams, status")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
@@ -59,6 +60,19 @@ export default async function TeamsPage() {
             plannedTeams={tournament.planned_teams}
             teams={teams ?? []}
           />
+        </div>
+
+        <div className="mt-5">
+          {tournament.status === "setup" ? (
+            <GenerateScheduleButton ready={(teams?.length ?? 0) >= 2} />
+          ) : (
+            <Link
+              href="/schedule"
+              className="block w-full rounded-lg bg-brand px-4 py-3 text-center text-base font-semibold text-white hover:bg-brand-dark"
+            >
+              View the schedule
+            </Link>
+          )}
         </div>
       </div>
     </main>

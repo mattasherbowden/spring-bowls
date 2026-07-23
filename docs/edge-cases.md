@@ -36,6 +36,7 @@ A living log of things that can go wrong, ambiguous rules, and what to probe dur
 - Poor phone signal at the green → optimistic save + "not saved yet" + retry (NFR-3, OD-3).
 - Supabase free tier pauses the project from inactivity before the event → keep-warm / pre-event check so the link is live on the day.
 - New edition reuses an old username → allowed; accounts are scoped per tournament.
+- Multiple browsers/devices → each keeps its own cookie-based session; a fresh browser shows the login page (never someone else's session), and one account can be live on several devices. **Open gap:** a genuinely shared device / kiosk needs an obvious "log out between users" affordance.
 
 **Security**
 - Player crafts a direct API call to score another team's fixture or cast a 3rd vote → rejected by Row Level Security (tested, not assumed).

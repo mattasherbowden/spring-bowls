@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAuthUser, deleteAuthUser } from "@/lib/supabase/auth-admin";
 import { suggestUsername, generatePassword } from "@/lib/domain/credentials";
+import { splitIntoGroups } from "@/lib/domain/planner";
+import { drawGroups, buildGroupSchedule } from "@/lib/domain/schedule";
 
 const EMAIL_DOMAIN = "springbowls.local";
 
@@ -191,4 +193,65 @@ export async function addTeam(
       players: output,
     },
   };
+}
+
+// ---------- generate the schedule (auto-draw the groups and lock) ----------
+
+export type GenerateState = { error?: string };
+
+export async function generateSchedule(
+  _prev: GenerateState,
+  _fd: FormData,
+): Promise<GenerateState> {
+  const ownerId = await currentOwnerId();
+  if (!ownerId) return { error: "Only the owner can generate the schedule." };
+
+  const admin = createAdminClient();
+  const { data: t } = await admin
+    .from("tournament")
+    .select("id, status, rink_count, preferred_group_size")
+    .neq("status", "archived")
+    .limit(1)
+    .maybeSingle();
+  if (!t) return { error: "No active tournament." };
+  if (t.status !== "setup") redirect("/schedule");
+
+  const { data: teams } = await admin
+    .from("team")
+    .select("id")
+    .eq("tournament_id", t.id)
+    .eq("withdrawn", false);
+  if (!teams || teams.length < 2) {
+    return { error: "Add at least 2 teams before generating the schedule." };
+  }
+
+  const sizes = splitIntoGroups(teams.length, t.preferred_group_size);
+  const drawn = drawGroups(
+    teams.map((x) => x.id),
+    sizes,
+  );
+
+  for (const group of drawn) {
+    await admin
+      .from("team")
+      .update({ group_label: group.label })
+      .in("id", group.teamIds);
+  }
+
+  const schedule = buildGroupSchedule(drawn, t.rink_count);
+  const rows = schedule.map((f) => ({
+    tournament_id: t.id,
+    stage: "group",
+    group_label: f.groupLabel,
+    round: f.round,
+    rink: f.rink,
+    order_index: f.order,
+    team_a_id: f.teamA,
+    team_b_id: f.teamB,
+  }));
+  const { error: fErr } = await admin.from("fixture").insert(rows);
+  if (fErr) return { error: `Could not save the schedule: ${fErr.message}` };
+
+  await admin.from("tournament").update({ status: "live" }).eq("id", t.id);
+  redirect("/schedule");
 }
