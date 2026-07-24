@@ -525,10 +525,10 @@ async function PlayerHome({
       <div className="mt-4 flex gap-2">
         <Link
           href="/awards"
-          className="flex-1 rounded-xl px-4 py-3 text-center text-sm font-bold text-white transition hover:brightness-105"
+          className="flex-1 rounded-xl px-4 py-3 text-center text-sm font-semibold text-white transition hover:brightness-105"
           style={{
-            background: "linear-gradient(135deg, #ff7ab3, #e0479a)",
-            boxShadow: "0 6px 16px -4px rgba(224,71,154,0.45)",
+            background: "linear-gradient(135deg, #ec8fae, #d975a0)",
+            boxShadow: "0 4px 12px -5px rgba(217,117,160,0.4)",
           }}
         >
           Vote for awards
@@ -547,14 +547,19 @@ async function PlayerHome({
           const ready = !!v.oppId;
           const inner = (
             <div className="rounded-2xl bg-brand/10 p-5 ring-1 ring-brand/30">
-              <div className="flex items-center justify-between">
+              <div className="flex items-start justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wide text-brand-dark">
                   {upNext.stage === "knockout" ? "Knockout · next" : "Up next"}
                 </span>
                 {upNext.rink && (
-                  <span className="text-xs text-foreground/60">
-                    Rink {upNext.rink}
-                  </span>
+                  <div className="text-right leading-none">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-foreground/40">
+                      Where
+                    </div>
+                    <div className="mt-0.5 font-display text-lg font-semibold text-brand-dark">
+                      Rink {upNext.rink}
+                    </div>
+                  </div>
                 )}
               </div>
               <p className="mt-1 font-display text-2xl font-semibold tracking-tight">
