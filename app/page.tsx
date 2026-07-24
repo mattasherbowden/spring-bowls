@@ -540,9 +540,14 @@ async function PlayerHome({
         <h2 className="font-display text-xl font-semibold">
           {randomGreeting()}, {firstName}
         </h2>
-        <p className="text-sm text-foreground/60">
-          {nameOf(teamId)} · Group {groupLabel ?? "—"}
-        </p>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-foreground/90">
+            {nameOf(teamId)}
+          </span>
+          <span className="rounded-full bg-brand/10 px-2.5 py-0.5 text-xs font-semibold text-brand-dark">
+            Group {groupLabel ?? "—"}
+          </span>
+        </div>
       </section>
 
       <div className="mt-4 flex gap-2">
