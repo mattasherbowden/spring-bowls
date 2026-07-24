@@ -5,8 +5,10 @@ import "server-only";
 // `sb_secret_` key against this project's ES256 JWT signing keys, whereas the
 // REST endpoint accepts it (verified against the live project).
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SECRET = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+// Trim defensively: a trailing newline/space pasted into a Vercel env var is a
+// classic silent break (the key then fails to authenticate).
+const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim();
+const SECRET = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
 
 function adminHeaders(): Record<string, string> {
   return {
@@ -14,6 +16,14 @@ function adminHeaders(): Record<string, string> {
     Authorization: `Bearer ${SECRET}`,
     "Content-Type": "application/json",
   };
+}
+
+// Prefix + length only (never the secret) — so a failing server can tell us
+// whether it holds the new `sb_secret_…` key or the old `eyJ…` one.
+function keyShape(): string {
+  const raw = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+  const ws = raw !== raw.trim() ? " +whitespace" : "";
+  return raw ? `${raw.trim().slice(0, 10)}… len ${raw.length}${ws}` : "MISSING";
 }
 
 export async function createAuthUser(
@@ -33,7 +43,7 @@ export async function createAuthUser(
       body?.message ??
       body?.error ??
       `HTTP ${res.status}`;
-    return { error: String(msg) };
+    return { error: `${String(msg)} [key ${keyShape()}]` };
   }
   return { id: body.id as string };
 }
