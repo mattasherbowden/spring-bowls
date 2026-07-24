@@ -358,19 +358,18 @@ async function PlayerHome({
 }) {
   const supabase = await createClient();
 
-  const { data: myTeam } = await supabase
+  const { data: allTeamsData } = await supabase
     .from("team")
     .select("id, name, group_label, players:player(display_name)")
-    .eq("id", teamId)
-    .single();
+    .eq("tournament_id", tournamentId);
+  const allTeams = (allTeamsData ?? []) as (TeamLite & {
+    group_label: string | null;
+  })[];
+  const myTeam = allTeams.find((t) => t.id === teamId) ?? null;
   const groupLabel: string | null = myTeam?.group_label ?? null;
-
-  const { data: groupTeamsData } = await supabase
-    .from("team")
-    .select("id, name, players:player(display_name)")
-    .eq("tournament_id", tournamentId)
-    .eq("group_label", groupLabel ?? "__none__");
-  const groupTeams = (groupTeamsData ?? []) as TeamLite[];
+  const groupTeams = groupLabel
+    ? allTeams.filter((t) => t.group_label === groupLabel)
+    : [];
 
   const { data: myFixturesData } = await supabase
     .from("fixture")
@@ -388,12 +387,28 @@ async function PlayerHome({
     .eq("tournament_id", tournamentId)
     .eq("group_label", groupLabel ?? "__none__");
 
+  // Every game on the board — used to find the game directly ahead of yours on
+  // your rink ("you're on after …").
+  const { data: allFixturesData } = await supabase
+    .from("fixture")
+    .select("id, rink, order_index, team_a_id, team_b_id, status")
+    .eq("tournament_id", tournamentId);
+  const allFixtures = (allFixturesData ?? []) as Array<{
+    id: string;
+    rink: number | null;
+    order_index: number;
+    team_a_id: string | null;
+    team_b_id: string | null;
+    status: string;
+  }>;
+
   const nameById = new Map<string, string>();
-  const add = (t: TeamLite) =>
-    nameById.set(t.id, t.name ?? t.players.map((p) => p.display_name).join(" & "));
-  if (myTeam) add(myTeam as TeamLite);
-  groupTeams.forEach(add);
-  // Knockout opponents can be from other groups; fall back to "TBC".
+  for (const t of allTeams) {
+    nameById.set(
+      t.id,
+      t.name ?? t.players.map((p) => p.display_name).join(" & "),
+    );
+  }
   const nameOf = (id: string | null) => (id ? (nameById.get(id) ?? "TBC") : "TBC");
 
   const completed: Fixture[] = (groupFixturesData ?? [])
@@ -426,6 +441,25 @@ async function PlayerHome({
   const unplayed = myFixtures.filter((f) => !isDone(f));
   const upNext = unplayed[0];
   const coming = unplayed.slice(1);
+
+  // The game directly ahead of yours on the same rink that's still to be played
+  // — so you know which game to watch (and whose score to chase).
+  const isOpenStatus = (s: string) => s !== "completed" && s !== "walkover";
+  let aheadGame: (typeof allFixtures)[number] | null = null;
+  let aheadCount = 0;
+  if (upNext && upNext.rink != null) {
+    const ahead = allFixtures
+      .filter(
+        (f) =>
+          f.rink === upNext.rink &&
+          f.id !== upNext.id &&
+          f.order_index < upNext.order_index &&
+          isOpenStatus(f.status),
+      )
+      .sort((a, b) => b.order_index - a.order_index);
+    aheadCount = ahead.length;
+    aheadGame = ahead[0] ?? null;
+  }
 
   const view = (f: FixtureLite) => {
     const iAmA = f.team_a_id === teamId;
@@ -484,6 +518,25 @@ async function PlayerHome({
                 <p className="mt-1 text-sm text-foreground/70">
                   You&apos;re currently {ordinal(myRank)} of {table.length} in
                   Group {groupLabel}
+                </p>
+              )}
+              {ready && aheadGame && (
+                <p className="mt-2 rounded-lg bg-white/70 px-3 py-2 text-sm text-foreground/70">
+                  ⏱ You&apos;re on after{" "}
+                  <span className="font-medium text-foreground">
+                    {nameOf(aheadGame.team_a_id)} v {nameOf(aheadGame.team_b_id)}
+                  </span>
+                  {aheadCount > 1 && (
+                    <span className="text-foreground/50">
+                      {" · "}
+                      {aheadCount} games ahead on Rink {upNext.rink}
+                    </span>
+                  )}
+                </p>
+              )}
+              {ready && !aheadGame && (
+                <p className="mt-2 text-sm font-medium text-brand-dark">
+                  ✅ Rink {upNext.rink} is clear — you&apos;re up now!
                 </p>
               )}
               <p className="mt-3 text-sm font-medium text-brand-dark">
