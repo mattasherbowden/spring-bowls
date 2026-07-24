@@ -446,6 +446,21 @@ async function PlayerHome({
         </p>
       </section>
 
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link
+          href="/awards"
+          className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium hover:bg-black/[.03]"
+        >
+          Vote for awards
+        </Link>
+        <Link
+          href="/schedule"
+          className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium hover:bg-black/[.03]"
+        >
+          See the draw
+        </Link>
+      </div>
+
       {upNext ? (
         (() => {
           const v = view(upNext);
@@ -507,7 +522,7 @@ async function PlayerHome({
               return (
                 <div
                   key={f.id}
-                  className="rounded-2xl bg-white p-4 opacity-60 shadow-sm ring-1 ring-black/5"
+                  className="rounded-2xl border border-dashed border-foreground/20 bg-white/40 p-4 text-foreground/60"
                 >
                   <span className="text-xs font-medium uppercase tracking-wide text-foreground/50">
                     {f.stage === "knockout" ? "Knockout" : "Group game"}
@@ -531,7 +546,7 @@ async function PlayerHome({
                 <Link
                   key={f.id}
                   href={`/fixture/${f.id}`}
-                  className="block rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 hover:opacity-80"
+                  className="block rounded-2xl bg-black/[.04] p-4 text-foreground/70 ring-1 ring-black/5 hover:bg-black/[.06]"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium uppercase tracking-wide text-foreground/50">
@@ -587,21 +602,6 @@ async function PlayerHome({
           </tbody>
         </table>
       </section>
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        <Link
-          href="/schedule"
-          className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium hover:bg-black/[.03]"
-        >
-          See the draw
-        </Link>
-        <Link
-          href="/awards"
-          className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium hover:bg-black/[.03]"
-        >
-          Vote for awards
-        </Link>
-      </div>
 
       {event && <EventInfo ev={event} />}
     </>
