@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { LoginForm } from "./_components/login-form";
 import { CreateOwnerForm } from "./_components/create-owner-form";
+import { Countdown } from "./_components/countdown";
 import { logout } from "./actions";
 import { computeStandings } from "@/lib/domain/standings";
 import type { Fixture } from "@/lib/domain/types";
@@ -28,7 +29,74 @@ function ordinal(n: number): string {
   return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
 }
 
-function Shell({ children }: { children: ReactNode }) {
+type EventInfoData = {
+  event_at: string | null;
+  venue_name: string | null;
+  venue_address: string | null;
+  venue_phone: string | null;
+  details: string | null;
+};
+
+function formatEventDate(iso: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Europe/London",
+  }).format(new Date(iso));
+}
+
+function EventInfo({ ev }: { ev: EventInfoData }) {
+  const hasVenue = ev.venue_name || ev.venue_address || ev.venue_phone;
+  const mapQuery = encodeURIComponent(
+    `${ev.venue_name ?? ""} ${ev.venue_address ?? ""}`.trim(),
+  );
+  return (
+    <>
+      {ev.details && (
+        <section className="mt-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+          <h2 className="text-lg font-semibold">On the day</h2>
+          <div className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground/80">
+            {ev.details}
+          </div>
+        </section>
+      )}
+      {hasVenue && (
+        <section className="mt-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+          <h2 className="text-lg font-semibold">📍 Venue</h2>
+          {ev.venue_name && <p className="mt-2 font-medium">{ev.venue_name}</p>}
+          {ev.venue_address && (
+            <a
+              href={`https://maps.google.com/?q=${mapQuery}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-0.5 block text-sm text-brand hover:text-brand-dark"
+            >
+              {ev.venue_address}
+            </a>
+          )}
+          {ev.venue_phone && (
+            <a
+              href={`tel:${ev.venue_phone.replace(/\s+/g, "")}`}
+              className="mt-1 block text-sm text-foreground/60"
+            >
+              {ev.venue_phone}
+            </a>
+          )}
+        </section>
+      )}
+    </>
+  );
+}
+
+function Shell({
+  children,
+  dateLabel,
+}: {
+  children: ReactNode;
+  dateLabel: string;
+}) {
   return (
     <main className="flex flex-1 flex-col items-center px-5 py-10">
       <div className="w-full max-w-md">
@@ -44,9 +112,7 @@ function Shell({ children }: { children: ReactNode }) {
               🇬🇧 BYO Brit edition 🥝
             </span>
           </div>
-          <p className="mt-4 text-base text-foreground/70">
-            Saturday 1 August 2026
-          </p>
+          <p className="mt-4 text-base text-foreground/70">{dateLabel}</p>
         </header>
         {children}
       </div>
@@ -70,11 +136,33 @@ export default async function Home() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const { data: evData } = await supabase
+    .from("event_settings")
+    .select("event_at, venue_name, venue_address, venue_phone, details")
+    .eq("id", 1)
+    .maybeSingle();
+  const ev = evData as EventInfoData | null;
+  const dateLabel = ev?.event_at
+    ? formatEventDate(ev.event_at)
+    : "date to be confirmed";
+
   if (!user) {
     const { data: setupDone } = await supabase.rpc("owner_exists");
     return (
-      <Shell>
-        <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+      <Shell dateLabel={dateLabel}>
+        {ev?.event_at && (
+          <section className="mt-8 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+            <p className="text-center text-xs font-semibold uppercase tracking-wide text-foreground/50">
+              Bowls begins in
+            </p>
+            <div className="mt-3">
+              <Countdown target={ev.event_at} />
+            </div>
+          </section>
+        )}
+        <section
+          className={`${ev?.event_at ? "mt-4" : "mt-8"} rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5`}
+        >
           {setupDone ? (
             <>
               <h2 className="text-lg font-semibold">Log in</h2>
@@ -93,6 +181,7 @@ export default async function Home() {
             </>
           )}
         </section>
+        {setupDone && ev && <EventInfo ev={ev} />}
         <p className="mt-6 text-center text-xs text-foreground/50">
           See you on the green.
         </p>
@@ -127,12 +216,13 @@ export default async function Home() {
 
   if (tournament && teamId) {
     return (
-      <Shell>
+      <Shell dateLabel={dateLabel}>
         <PlayerHome
           tournamentId={tournament.id}
           advance={tournament.advance}
           teamId={teamId}
           firstName={firstName}
+          event={ev}
         />
         <LogoutButton />
       </Shell>
@@ -140,7 +230,7 @@ export default async function Home() {
   }
 
   return (
-    <Shell>
+    <Shell dateLabel={dateLabel}>
       <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
         <h2 className="text-lg font-semibold">
           Welcome, {firstName}
@@ -196,12 +286,20 @@ export default async function Home() {
           </p>
         )}
         {profile?.is_owner && (
-          <Link
-            href="/setup/owner"
-            className="mt-4 block text-sm font-medium text-brand hover:text-brand-dark"
-          >
-            Account &amp; recovery →
-          </Link>
+          <div className="mt-4 flex flex-col items-start gap-1.5">
+            <Link
+              href="/setup/event"
+              className="text-sm font-medium text-brand hover:text-brand-dark"
+            >
+              Edit event details →
+            </Link>
+            <Link
+              href="/setup/owner"
+              className="text-sm font-medium text-brand hover:text-brand-dark"
+            >
+              Account &amp; recovery →
+            </Link>
+          </div>
         )}
       </section>
     </Shell>
@@ -213,11 +311,13 @@ async function PlayerHome({
   advance,
   teamId,
   firstName,
+  event,
 }: {
   tournamentId: string;
   advance: number;
   teamId: string;
   firstName: string;
+  event: EventInfoData | null;
 }) {
   const supabase = await createClient();
 
@@ -465,6 +565,8 @@ async function PlayerHome({
           Vote for awards (soon)
         </button>
       </div>
+
+      {event && <EventInfo ev={event} />}
     </>
   );
 }

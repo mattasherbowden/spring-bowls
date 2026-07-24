@@ -258,6 +258,31 @@ export async function generateSchedule(
   redirect("/schedule");
 }
 
+export type EventState = { error?: string; done?: boolean };
+
+export async function saveEvent(
+  _prev: EventState,
+  fd: FormData,
+): Promise<EventState> {
+  const ownerId = await currentOwnerId();
+  if (!ownerId) return { error: "Only the owner can edit the event." };
+
+  const admin = createAdminClient();
+  const eventAt = String(fd.get("eventAt") ?? "").trim();
+  const { error } = await admin.from("event_settings").upsert({
+    id: 1,
+    event_at: eventAt || null,
+    venue_name: String(fd.get("venueName") ?? "").trim() || null,
+    venue_address: String(fd.get("venueAddress") ?? "").trim() || null,
+    venue_phone: String(fd.get("venuePhone") ?? "").trim() || null,
+    details: String(fd.get("details") ?? "").trim() || null,
+    updated_at: new Date().toISOString(),
+  });
+  if (error) return { error: `Could not save: ${error.message}` };
+  revalidatePath("/");
+  return { done: true };
+}
+
 export async function refreshKnockout(): Promise<void> {
   const ownerId = await currentOwnerId();
   if (!ownerId) return;
