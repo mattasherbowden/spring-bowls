@@ -71,13 +71,19 @@ export function buildBracket(qualifierLabels: string[]): BracketRound[] {
     posOfSeed[seed] = pos;
   });
 
+  // The top (size - n) seeds get byes — reserve each of their first-round
+  // partner slots so they stay empty and the byes fall to the best seeds.
+  const byeCount = size - n;
+  const reserved = new Set<number>();
+  for (let seed = 1; seed <= byeCount; seed++) reserved.add(posOfSeed[seed] ^ 1);
+
   const slots: (string | null)[] = new Array(size).fill(null);
   const placedByGroup = new Map<string, number[]>();
 
   // Place best seed first. Each team goes to the empty position that keeps it
   // furthest (latest meeting round) from its already-placed group-mates; ties
-  // break toward the team's canonical seed position (so byes still fall to the
-  // top seeds), then the lowest index for determinism.
+  // break toward the team's canonical seed position, then the lowest index for
+  // determinism.
   for (let seed = 1; seed <= n; seed++) {
     const label = qualifierLabels[seed - 1];
     const group = groupOf(label);
@@ -88,7 +94,7 @@ export function buildBracket(qualifierLabels: string[]): BracketRound[] {
     let bestSep = -1;
     let bestCanonical = false;
     for (let p = 0; p < size; p++) {
-      if (slots[p] !== null) continue;
+      if (slots[p] !== null || reserved.has(p)) continue;
       const sep =
         mates.length === 0
           ? Number.POSITIVE_INFINITY
