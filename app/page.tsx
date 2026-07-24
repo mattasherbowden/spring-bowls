@@ -58,6 +58,19 @@ function formatEventDate(iso: string): string {
   return `${date} · ${time}`;
 }
 
+function greetingForLondon(): string {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      hour: "numeric",
+      hour12: false,
+      timeZone: "Europe/London",
+    }).format(new Date()),
+  );
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 function EventInfo({ ev }: { ev: EventInfoData }) {
   const hasVenue = ev.venue_name || ev.venue_address || ev.venue_phone;
   const mapQuery = encodeURIComponent(
@@ -504,22 +517,24 @@ async function PlayerHome({
   return (
     <>
       <section className="mt-8">
-        <h2 className="font-display text-xl font-semibold">Hi {firstName} 👋</h2>
+        <h2 className="font-display text-xl font-semibold">
+          {greetingForLondon()}, {firstName}
+        </h2>
         <p className="text-sm text-foreground/60">
           {nameOf(teamId)} · Group {groupLabel ?? "—"}
         </p>
       </section>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-col gap-2">
         <Link
           href="/awards"
-          className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium hover:bg-black/[.03]"
+          className="rounded-xl bg-brand px-4 py-3 text-center text-sm font-semibold text-white hover:bg-brand-dark"
         >
           Vote for awards
         </Link>
         <Link
           href="/schedule"
-          className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium hover:bg-black/[.03]"
+          className="rounded-xl border border-black/10 px-4 py-2.5 text-center text-sm font-medium hover:bg-black/[.03]"
         >
           See the draw
         </Link>
@@ -530,9 +545,9 @@ async function PlayerHome({
           const v = view(upNext);
           const ready = !!v.oppId;
           const inner = (
-            <div className="rounded-2xl bg-pink-tint p-5 ring-1 ring-pink-line">
+            <div className="rounded-2xl bg-brand/10 p-5 ring-1 ring-brand/30">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wide text-pink-dark">
+                <span className="text-xs font-semibold uppercase tracking-wide text-brand-dark">
                   {upNext.stage === "knockout" ? "Knockout · next" : "Up next"}
                 </span>
                 {upNext.rink && (
@@ -569,7 +584,7 @@ async function PlayerHome({
                   ✅ Rink {upNext.rink} is clear — you&apos;re up now!
                 </p>
               )}
-              <p className="mt-3 text-sm font-medium text-pink-dark">
+              <p className="mt-3 text-sm font-medium text-brand-dark">
                 {ready
                   ? "Tap to enter the score →"
                   : "Waiting for your opponent to be decided"}
