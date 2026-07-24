@@ -143,7 +143,7 @@ export async function resolveKnockout(
 
   let scheduledCount = knockout.filter((k) => k.status !== "pending").length;
 
-  const writes: Promise<unknown>[] = [];
+  const writes: PromiseLike<unknown>[] = [];
   for (const k of knockout) {
     if (k.status === "completed" || k.status === "walkover") continue;
     const a = resolveSrc(k.team_a_source);
