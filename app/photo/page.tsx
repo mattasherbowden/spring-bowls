@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { HomeButton } from "../_components/home-button";
-import { togglePhotoDone } from "./actions";
+import { togglePhotoDone, savePhotoEmail } from "./actions";
 
 export default async function PhotoPage() {
   const supabase = await createClient();
@@ -12,34 +12,28 @@ export default async function PhotoPage() {
   if (!user) redirect("/");
 
   const admin = createAdminClient();
-  const [{ data: tournament }, { data: ev }] = await Promise.all([
-    admin
-      .from("tournament")
-      .select("id")
-      .neq("status", "archived")
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("event_settings")
-      .select("photo_album_url")
-      .eq("id", 1)
-      .maybeSingle(),
-  ]);
-  const albumUrl: string | null = ev?.photo_album_url ?? null;
+  const { data: tournament } = await admin
+    .from("tournament")
+    .select("id")
+    .neq("status", "archived")
+    .limit(1)
+    .maybeSingle();
 
   let partnerName: string | null = null;
+  let email: string | null = null;
   let done = false;
   let isPlayer = false;
   if (tournament) {
     const { data: me } = await admin
       .from("player")
-      .select("photo_partner_id, photo_done")
+      .select("photo_partner_id, photo_done, photo_email")
       .eq("tournament_id", tournament.id)
       .eq("profile_id", user.id)
       .maybeSingle();
     if (me) {
       isPlayer = true;
       done = me.photo_done;
+      email = me.photo_email;
       if (me.photo_partner_id) {
         const { data: partner } = await admin
           .from("player")
@@ -50,6 +44,9 @@ export default async function PhotoPage() {
       }
     }
   }
+
+  const inputCls =
+    "mt-1 w-full rounded-lg border border-black/10 px-3 py-2 text-base text-black outline-none focus:border-brand focus:ring-2 focus:ring-brand/30";
 
   return (
     <main className="flex flex-1 flex-col items-center px-5 py-8">
@@ -67,9 +64,8 @@ export default async function PhotoPage() {
             <p className="mt-1 font-display text-2xl font-semibold text-brand-dark">
               {partnerName}
             </p>
-            <p className="mt-2 text-sm text-foreground/70">
-              Track them down, grab a fun photo together, and pop it in the
-              shared album. Same partner all day — no swaps!
+            <p className="mt-2 text-xs font-medium uppercase tracking-wide text-foreground/40">
+              Not to be confused with your loyal and talented bowls partner
             </p>
           </div>
         ) : (
@@ -82,25 +78,37 @@ export default async function PhotoPage() {
         <section className="mt-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
           <h2 className="text-lg font-semibold">How it works</h2>
           <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm text-foreground/70">
-            <li>Find your partner and take a photo together.</li>
-            <li>Open the shared album below (you may be asked to join it).</li>
-            <li>Add your photo straight to the album.</li>
-            <li>Come back here and tick it off.</li>
+            <li>Find your Photo Bomb partner and take a photo together.</li>
+            <li>Enter your email below — Matt will invite you to the shared album.</li>
+            <li>Once you&apos;re in, add your photo (and enjoy everyone else&apos;s).</li>
           </ol>
-          {albumUrl && (
-            <a
-              href={albumUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-4 block rounded-xl bg-brand px-4 py-3 text-center text-sm font-semibold text-white hover:bg-brand-dark"
-            >
-              Open the shared album →
-            </a>
+
+          {isPlayer && (
+            <form action={savePhotoEmail} className="mt-4">
+              <label className="block">
+                <span className="text-sm font-medium">Your email</span>
+                <input
+                  name="email"
+                  type="email"
+                  defaultValue={email ?? ""}
+                  placeholder="you@example.com"
+                  required
+                  className={inputCls}
+                />
+              </label>
+              <button
+                type="submit"
+                className="mt-2 w-full rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand-dark"
+              >
+                Save my email
+              </button>
+              {email && (
+                <p className="mt-2 text-sm text-brand-dark">
+                  ✓ Got it — Matt will send an album invite to {email}.
+                </p>
+              )}
+            </form>
           )}
-          <p className="mt-2 text-xs text-foreground/50">
-            Photos live in an Apple Shared Album — you upload straight there, not
-            through this app.
-          </p>
         </section>
 
         {isPlayer && (

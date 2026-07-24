@@ -276,7 +276,7 @@ export default async function Home() {
 
   if (tournament && teamId) {
     return (
-      <Shell dateLabel={dateLabel} eventAt={ev?.event_at}>
+      <Shell dateLabel={dateLabel}>
         <PlayerHome
           tournamentId={tournament.id}
           advance={tournament.advance}
@@ -289,7 +289,7 @@ export default async function Home() {
   }
 
   return (
-    <Shell dateLabel={dateLabel} eventAt={ev?.event_at}>
+    <Shell dateLabel={dateLabel}>
       <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
         <h2 className="text-lg font-semibold">
           Welcome, {firstName}
@@ -388,6 +388,12 @@ export default async function Home() {
               className="text-sm font-medium text-brand hover:text-brand-dark"
             >
               Manage helpers →
+            </Link>
+            <Link
+              href="/setup/photo"
+              className="text-sm font-medium text-brand hover:text-brand-dark"
+            >
+              Photo Bomb emails →
             </Link>
             <Link
               href="/setup/owner"

@@ -13,6 +13,7 @@ import {
 import { suggestUsername, generatePassword } from "@/lib/domain/credentials";
 import { splitIntoGroups } from "@/lib/domain/planner";
 import { drawGroups, buildGroupSchedule } from "@/lib/domain/schedule";
+import { assignPhotoPartners } from "@/lib/domain/photo";
 import { resolveKnockout } from "@/lib/server/knockout";
 
 const EMAIL_DOMAIN = "springbowls.local";
@@ -274,22 +275,21 @@ export async function generateSchedule(
 
   await resolveKnockout(admin, t.id);
 
-  // Photo-bomb: give each player a fixed random partner (one random cycle).
+  // Photo-bomb: fixed partner for each player — mutual, never yourself, never
+  // your own team-mate.
   const { data: photoPlayers } = await admin
     .from("player")
-    .select("id")
+    .select("id, team_id")
     .eq("tournament_id", t.id);
   if (photoPlayers && photoPlayers.length >= 2) {
-    const ids = photoPlayers.map((p) => p.id);
-    for (let i = ids.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [ids[i], ids[j]] = [ids[j], ids[i]];
-    }
+    const pairs = assignPhotoPartners(
+      photoPlayers.map((p) => ({ id: p.id, teamId: p.team_id })),
+    );
     await Promise.all(
-      ids.map((id, i) =>
+      [...pairs.entries()].map(([id, partnerId]) =>
         admin
           .from("player")
-          .update({ photo_partner_id: ids[(i + 1) % ids.length] })
+          .update({ photo_partner_id: partnerId })
           .eq("id", id),
       ),
     );
