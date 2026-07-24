@@ -132,7 +132,8 @@ export async function submitScore(
   await resolveKnockout(admin, fixture.tournament_id);
 
   revalidatePath("/schedule");
-  redirect("/schedule");
+  revalidatePath("/");
+  redirect(`/scored/${fixtureId}`);
 }
 
 export async function unlockFixture(

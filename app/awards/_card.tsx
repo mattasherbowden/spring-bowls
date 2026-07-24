@@ -19,7 +19,10 @@ export function AwardCard({
   const picked = new Set(picks);
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+    <section
+      id={award.key}
+      className="scroll-mt-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5"
+    >
       <h3 className="text-lg font-semibold">
         {award.emoji} {award.title}
       </h3>
