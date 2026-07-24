@@ -8,7 +8,7 @@ type PlayerRow = { id: string; display_name: string; nationality: string | null 
 type TeamRow = { id: string; name: string | null; players: { display_name: string }[] };
 
 function flag(n: string | null): string {
-  return n === "brit" ? "🇬🇧 " : n === "kiwi" ? "🥝 " : "";
+  return n === "brit" ? "🇬🇧 " : n === "kiwi" ? "🇳🇿 " : "";
 }
 
 export default async function ResultsPage() {

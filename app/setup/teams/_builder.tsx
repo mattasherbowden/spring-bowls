@@ -12,7 +12,7 @@ type TeamRow = {
 
 function flag(nat: string | null): string {
   if (nat === "brit") return " 🇬🇧";
-  if (nat === "kiwi") return " 🥝";
+  if (nat === "kiwi") return " 🇳🇿";
   return "";
 }
 
@@ -129,7 +129,7 @@ export function TeamBuilder({
             />
             <div className="mt-2 grid grid-cols-2 gap-2">
               <NatRadio index={i} value="brit" label="🇬🇧 Brit" defaultChecked={i === 0} />
-              <NatRadio index={i} value="kiwi" label="🥝 Kiwi" defaultChecked={i === 1} />
+              <NatRadio index={i} value="kiwi" label="🇳🇿 Kiwi" defaultChecked={i === 1} />
             </div>
           </div>
         ))}

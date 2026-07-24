@@ -45,7 +45,7 @@ export const AWARDS: AwardDef[] = [
   {
     key: "coolest_kiwi",
     title: "Coolest Kiwi",
-    emoji: "🥝",
+    emoji: "🇳🇿",
     kind: "player",
     nationality: "kiwi",
     blurb: "Most gloriously Kiwi.",

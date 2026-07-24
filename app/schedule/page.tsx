@@ -40,7 +40,7 @@ type KoRow = {
 };
 
 function flag(n: string | null): string {
-  return n === "brit" ? " 🇬🇧" : n === "kiwi" ? " 🥝" : "";
+  return n === "brit" ? " 🇬🇧" : n === "kiwi" ? " 🇳🇿" : "";
 }
 
 function sourceLabel(s: string | null): string {

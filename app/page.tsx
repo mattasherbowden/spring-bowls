@@ -109,7 +109,7 @@ function Shell({
           </h1>
           <div className="mt-4 flex justify-center">
             <span className="rounded-full bg-white px-3 py-1 text-sm font-medium shadow-sm ring-1 ring-black/5">
-              🇬🇧 BYO Brit edition 🥝
+              🇬🇧 BYO Brit edition 🇳🇿
             </span>
           </div>
           <p className="mt-4 text-base text-foreground/70">{dateLabel}</p>

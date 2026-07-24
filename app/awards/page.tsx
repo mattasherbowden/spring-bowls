@@ -16,7 +16,7 @@ type PlayerRow = {
 type TeamRow = { id: string; name: string | null; players: { display_name: string }[] };
 
 function flag(nat: string | null): string {
-  return nat === "brit" ? "🇬🇧 " : nat === "kiwi" ? "🥝 " : "";
+  return nat === "brit" ? "🇬🇧 " : nat === "kiwi" ? "🇳🇿 " : "";
 }
 
 function Frame({ children }: { children: React.ReactNode }) {
