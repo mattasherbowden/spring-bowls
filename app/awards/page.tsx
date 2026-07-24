@@ -6,6 +6,7 @@ import { AWARDS, type AwardDef } from "@/lib/domain/awards";
 import { AwardCard } from "./_card";
 import { setVotingStatus } from "./actions";
 import { HomeButton } from "../_components/home-button";
+import { SBMark } from "../_components/sb-mark";
 
 type PlayerRow = {
   id: string;
@@ -28,7 +29,7 @@ function Frame({ children }: { children: React.ReactNode }) {
           <div className="flex items-center justify-between">
             <HomeButton />
             <h1 className="font-display text-2xl font-semibold tracking-tight">
-              🏆 Awards
+              <SBMark className="mr-1.5" />🏆 Awards
             </h1>
           </div>
         </header>

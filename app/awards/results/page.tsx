@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { HomeButton } from "../../_components/home-button";
+import { SBMark } from "../../_components/sb-mark";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -93,7 +94,7 @@ export default async function ResultsPage() {
             </Link>
           </div>
           <h1 className="mt-3 text-center font-display text-2xl font-semibold tracking-tight">
-            📊 Live results
+            <SBMark className="mr-1.5" />📊 Live results
           </h1>
           <p className="mt-1 text-sm text-foreground/60">
             {status === "closed"

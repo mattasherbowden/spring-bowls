@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { HomeButton } from "../../_components/home-button";
+import { SBMark } from "../../_components/sb-mark";
 
 type Row = {
   display_name: string;
@@ -52,7 +53,9 @@ export default async function PhotoAdminPage() {
       <div className="w-full max-w-md">
         <div className="flex items-center justify-between">
           <HomeButton />
-          <h1 className="font-display text-xl font-semibold">📸 Photo Bomb</h1>
+          <h1 className="font-display text-xl font-semibold">
+            <SBMark className="mr-1.5" />📸 Photo Bomb
+          </h1>
         </div>
 
         <p className="mt-4 text-sm text-foreground/80">

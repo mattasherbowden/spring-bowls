@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { HomeButton } from "../_components/home-button";
+import { SBMark } from "../_components/sb-mark";
 import { togglePhotoDone, savePhotoEmail } from "./actions";
 
 export default async function PhotoPage({
@@ -61,7 +62,9 @@ export default async function PhotoPage({
       <div className="w-full max-w-md">
         <div className="flex items-center justify-between">
           <HomeButton />
-          <h1 className="font-display text-xl font-semibold">📸 Photo Bomb</h1>
+          <h1 className="font-display text-xl font-semibold">
+            <SBMark className="mr-1.5" />📸 Photo Bomb
+          </h1>
         </div>
 
         {isPlayer && partnerName ? (

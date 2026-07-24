@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { HomeButton } from "../_components/home-button";
+import { SBMark } from "../_components/sb-mark";
 import { createClient } from "@/lib/supabase/server";
 import { computeStandings } from "@/lib/domain/standings";
 import { buildBracket } from "@/lib/domain/bracket";
@@ -185,7 +186,9 @@ export default async function SchedulePage() {
           <p className="mt-3 text-sm font-medium uppercase tracking-[0.2em] text-brand">
             {tournament.name}
           </p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">Schedule</h1>
+          <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight">
+            <SBMark className="mr-2" />Schedule
+          </h1>
         </header>
 
         {fixtures.length === 0 ? (
