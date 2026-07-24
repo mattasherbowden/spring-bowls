@@ -184,6 +184,76 @@ export async function unlockFixture(
     .eq("id", fixtureId);
   await admin.from("fixture_end").delete().eq("fixture_id", fixtureId);
 
+  // Re-resolve the bracket so any downstream knockout slots reflect the reset.
+  await resolveKnockout(admin, fixture.tournament_id);
+
   revalidatePath("/schedule");
   redirect(`/fixture/${fixtureId}`);
+}
+
+const WALKOVER_WIN = 10;
+const WALKOVER_LOSS = 0;
+
+// Admin/owner records a walkover (a no-show or withdrawal): the present team
+// wins a default 10–0. Recomputes the bracket afterwards so a no-show can't
+// block the knockout from resolving.
+export async function walkoverFixture(fd: FormData): Promise<void> {
+  const fixtureId = String(fd.get("fixtureId") ?? "");
+  const winnerTeamId = String(fd.get("winnerTeamId") ?? "");
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const admin = createAdminClient();
+  const { data: fixture } = await admin
+    .from("fixture")
+    .select("tournament_id, team_a_id, team_b_id")
+    .eq("id", fixtureId)
+    .maybeSingle();
+  if (!fixture) return;
+
+  const { data: prof } = await admin
+    .from("profile")
+    .select("is_owner, is_admin")
+    .eq("id", user.id)
+    .maybeSingle();
+  const { data: me } = await admin
+    .from("player")
+    .select("role")
+    .eq("tournament_id", fixture.tournament_id)
+    .eq("profile_id", user.id)
+    .maybeSingle();
+  if (!prof?.is_owner && !prof?.is_admin && me?.role !== "admin") return;
+
+  // Winner must be one of the two known teams.
+  if (
+    !fixture.team_a_id ||
+    !fixture.team_b_id ||
+    (winnerTeamId !== fixture.team_a_id && winnerTeamId !== fixture.team_b_id)
+  ) {
+    return;
+  }
+  const aWon = winnerTeamId === fixture.team_a_id;
+
+  await admin
+    .from("fixture")
+    .update({
+      status: "walkover",
+      winner_team_id: winnerTeamId,
+      shots_a: aWon ? WALKOVER_WIN : WALKOVER_LOSS,
+      shots_b: aWon ? WALKOVER_LOSS : WALKOVER_WIN,
+      locked_at: new Date().toISOString(),
+      locked_by: user.id,
+      entered_by: "walkover",
+    })
+    .eq("id", fixtureId);
+  await admin.from("fixture_end").delete().eq("fixture_id", fixtureId);
+  await resolveKnockout(admin, fixture.tournament_id);
+
+  revalidatePath("/schedule");
+  revalidatePath("/");
+  redirect("/schedule");
 }

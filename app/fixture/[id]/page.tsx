@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { ScoreForm, UnlockButton } from "./_scoreform";
+import { walkoverFixture } from "../actions";
 
 type TeamRow = {
   id: string;
@@ -129,6 +130,44 @@ export default async function FixturePage({
           <p className="mt-6 text-center text-sm text-foreground/60">
             This game hasn&apos;t been played yet.
           </p>
+        )}
+        {isAdmin && bothSet && !done && (
+          <div className="mt-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+            <p className="text-sm font-medium">No-show? Record a walkover</p>
+            <p className="mt-0.5 text-xs text-foreground/50">
+              Awards a 10–0 win to the team that turned up.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <form action={walkoverFixture}>
+                <input type="hidden" name="fixtureId" value={fixture.id} />
+                <input
+                  type="hidden"
+                  name="winnerTeamId"
+                  value={fixture.team_a_id ?? ""}
+                />
+                <button
+                  type="submit"
+                  className="rounded-lg border border-black/10 px-3 py-1.5 text-sm font-medium hover:bg-black/[.03]"
+                >
+                  Win to {teamName(fixture.team_a_id)}
+                </button>
+              </form>
+              <form action={walkoverFixture}>
+                <input type="hidden" name="fixtureId" value={fixture.id} />
+                <input
+                  type="hidden"
+                  name="winnerTeamId"
+                  value={fixture.team_b_id ?? ""}
+                />
+                <button
+                  type="submit"
+                  className="rounded-lg border border-black/10 px-3 py-1.5 text-sm font-medium hover:bg-black/[.03]"
+                >
+                  Win to {teamName(fixture.team_b_id)}
+                </button>
+              </form>
+            </div>
+          </div>
         )}
       </div>
     </main>

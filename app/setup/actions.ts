@@ -230,6 +230,17 @@ export async function generateSchedule(
     return { error: "Add at least 2 teams before generating the schedule." };
   }
 
+  // Atomically claim the setup→live transition so a double-tap (or a retry on
+  // patchy signal) can't generate the schedule twice. Only the caller whose
+  // conditional update actually flips setup→live proceeds; the rest bounce out.
+  const { data: claim } = await admin
+    .from("tournament")
+    .update({ status: "live" })
+    .eq("id", t.id)
+    .eq("status", "setup")
+    .select("id");
+  if (!claim || claim.length === 0) redirect("/schedule");
+
   const sizes = splitIntoGroups(teams.length, t.preferred_group_size);
   const drawn = drawGroups(
     teams.map((x) => x.id),
@@ -255,9 +266,12 @@ export async function generateSchedule(
     team_b_id: f.teamB,
   }));
   const { error: fErr } = await admin.from("fixture").insert(rows);
-  if (fErr) return { error: `Could not save the schedule: ${fErr.message}` };
+  if (fErr) {
+    // Undo the claim so it can be retried cleanly.
+    await admin.from("tournament").update({ status: "setup" }).eq("id", t.id);
+    return { error: `Could not save the schedule: ${fErr.message}` };
+  }
 
-  await admin.from("tournament").update({ status: "live" }).eq("id", t.id);
   await resolveKnockout(admin, t.id);
   redirect("/schedule");
 }

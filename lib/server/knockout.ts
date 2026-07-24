@@ -38,7 +38,9 @@ export async function resolveKnockout(
       .from("fixture")
       .select(koSelect)
       .eq("tournament_id", tournamentId)
-      .eq("stage", "knockout"),
+      .eq("stage", "knockout")
+      .order("round", { ascending: true })
+      .order("match_code", { ascending: true }),
   ]);
   if (!t) return;
   const advance = t.advance as number;
@@ -86,7 +88,9 @@ export async function resolveKnockout(
       .from("fixture")
       .select(koSelect)
       .eq("tournament_id", tournamentId)
-      .eq("stage", "knockout");
+      .eq("stage", "knockout")
+      .order("round", { ascending: true })
+      .order("match_code", { ascending: true });
     knockout = reload.data ?? [];
   }
 
@@ -96,13 +100,17 @@ export async function resolveKnockout(
     const gFixtures = groupFixtures.filter((f) => f.group_label === g);
     const size = groupSize.get(g) ?? 0;
     const expected = (size * (size - 1)) / 2;
-    if (gFixtures.filter((f) => f.status === "completed").length < expected) {
+    if (
+      gFixtures.filter(
+        (f) => f.status === "completed" || f.status === "walkover",
+      ).length < expected
+    ) {
       continue;
     }
     const domain: Fixture[] = gFixtures
       .filter(
         (f) =>
-          f.status === "completed" &&
+          (f.status === "completed" || f.status === "walkover") &&
           f.team_a_id &&
           f.team_b_id &&
           f.shots_a != null &&
@@ -128,7 +136,11 @@ export async function resolveKnockout(
 
   const matchWinner = new Map<string, string>();
   for (const k of knockout) {
-    if (k.status === "completed" && k.winner_team_id && k.match_code) {
+    if (
+      (k.status === "completed" || k.status === "walkover") &&
+      k.winner_team_id &&
+      k.match_code
+    ) {
       matchWinner.set(k.match_code, k.winner_team_id);
     }
   }
@@ -149,8 +161,12 @@ export async function resolveKnockout(
     const a = resolveSrc(k.team_a_source);
     const b = resolveSrc(k.team_b_source);
     const update: Record<string, unknown> = {};
-    if (a !== k.team_a_id) update.team_a_id = a;
-    if (b !== k.team_b_id) update.team_b_id = b;
+    // Only ever fill a slot with a resolved team; never wipe an already-set
+    // team back to null because its source became transiently unresolvable
+    // (e.g. a group game was unlocked to correct a score). It re-fills once the
+    // source resolves again.
+    if (a && a !== k.team_a_id) update.team_a_id = a;
+    if (b && b !== k.team_b_id) update.team_b_id = b;
     if (a && b && k.status === "pending") {
       update.status = "scheduled";
       update.rink = (scheduledCount % rinkCount) + 1;

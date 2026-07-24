@@ -119,25 +119,23 @@ export async function logout(): Promise<void> {
 // ---------- owner recovery (no email, so a recovery code) ----------
 
 const RECOVERY_WORDS = [
-  "green",
-  "jack",
-  "rink",
-  "bowl",
-  "spring",
-  "mat",
-  "ditch",
-  "draw",
-  "skip",
-  "lead",
+  "green", "jack", "rink", "bowl", "spring", "mat", "ditch", "draw",
+  "skip", "lead", "kiwi", "brit", "fern", "thistle", "rose", "crown",
+  "lawn", "woods", "bias", "toucher", "wick", "trundle", "measure", "umpire",
+  "clubhouse", "pennant", "verge", "roller", "shot", "jackhigh",
 ];
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function hashCode(code: string): string {
   return createHash("sha256").update(code.trim().toLowerCase()).digest("hex");
 }
 
+// Three words + four digits from a 30-word list ≈ 2.4e8 combinations; with the
+// throttle in recoverPassword, guessing it is impractical.
 function makeRecoveryCode(): string {
   const word = () => RECOVERY_WORDS[randomInt(RECOVERY_WORDS.length)];
-  return `${word()}-${word()}-${randomInt(1000, 10000)}`;
+  return `${word()}-${word()}-${word()}-${randomInt(1000, 10000)}`;
 }
 
 export type RecoveryState = { error?: string; code?: string; done?: boolean };
@@ -161,10 +159,13 @@ export async function generateRecoveryCode(
   if (!prof?.is_owner) return { error: "Only the owner has a recovery code." };
 
   const code = makeRecoveryCode();
-  await admin
+  const { error } = await admin
     .from("profile")
     .update({ recovery_hash: hashCode(code) })
     .eq("id", user.id);
+  if (error) {
+    return { error: "Could not save the recovery code — please try again." };
+  }
   return { code };
 }
 
