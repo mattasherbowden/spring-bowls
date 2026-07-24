@@ -10,6 +10,9 @@ export type AwardDef = {
   // player awards may be restricted to one nationality (uses the Brit/Kiwi flag)
   nationality?: "brit" | "kiwi";
   blurb: string;
+  // pastel tint + matching ink for the award's chip
+  tint: string;
+  ink: string;
 };
 
 export const AWARDS: AwardDef[] = [
@@ -19,6 +22,8 @@ export const AWARDS: AwardDef[] = [
     emoji: "👑",
     kind: "team",
     blurb: "Sharpest whites on the green.",
+    tint: "#fde6cf",
+    ink: "#8a5a1f",
   },
   {
     key: "cutest_couple",
@@ -26,6 +31,8 @@ export const AWARDS: AwardDef[] = [
     emoji: "💕",
     kind: "team",
     blurb: "The pairing that melts hearts.",
+    tint: "#fbe0ea",
+    ink: "#b03567",
   },
   {
     key: "bowl_of_the_day",
@@ -33,6 +40,8 @@ export const AWARDS: AwardDef[] = [
     emoji: "🎯",
     kind: "player",
     blurb: "The single best bowl anyone saw.",
+    tint: "#fdeecb",
+    ink: "#8a6400",
   },
   {
     key: "coolest_brit",
@@ -41,6 +50,8 @@ export const AWARDS: AwardDef[] = [
     kind: "player",
     nationality: "brit",
     blurb: "Most gloriously British.",
+    tint: "#fbe1e1",
+    ink: "#a33d3d",
   },
   {
     key: "coolest_kiwi",
@@ -49,6 +60,8 @@ export const AWARDS: AwardDef[] = [
     kind: "player",
     nationality: "kiwi",
     blurb: "Most gloriously Kiwi.",
+    tint: "#e2f2e7",
+    ink: "#26833f",
   },
 ];
 

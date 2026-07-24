@@ -104,8 +104,8 @@ function Shell({
           <p className="text-sm font-medium uppercase tracking-[0.2em] text-brand">
             7th edition
           </p>
-          <h1 className="mt-2 text-5xl font-bold tracking-tight">
-            Spring <span className="text-brand">Bowls</span>
+          <h1 className="mt-2 font-display text-5xl font-bold tracking-tight">
+            Spring <span className="text-pink">Bowls</span>
           </h1>
           <div className="mt-4 flex justify-center">
             <span className="rounded-full bg-white px-3 py-1 text-sm font-medium shadow-sm ring-1 ring-black/5">
@@ -474,7 +474,7 @@ async function PlayerHome({
   return (
     <>
       <section className="mt-8">
-        <h2 className="text-xl font-semibold">Hi {firstName} 👋</h2>
+        <h2 className="font-display text-xl font-semibold">Hi {firstName} 👋</h2>
         <p className="text-sm text-foreground/60">
           {nameOf(teamId)} · Group {groupLabel ?? "—"}
         </p>
@@ -500,9 +500,9 @@ async function PlayerHome({
           const v = view(upNext);
           const ready = !!v.oppId;
           const inner = (
-            <div className="rounded-2xl bg-brand/10 p-5 ring-1 ring-brand/30">
+            <div className="rounded-2xl bg-pink-tint p-5 ring-1 ring-pink-line">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wide text-brand-dark">
+                <span className="text-xs font-semibold uppercase tracking-wide text-pink-dark">
                   {upNext.stage === "knockout" ? "Knockout · next" : "Up next"}
                 </span>
                 {upNext.rink && (
@@ -511,7 +511,7 @@ async function PlayerHome({
                   </span>
                 )}
               </div>
-              <p className="mt-1 text-2xl font-bold tracking-tight">
+              <p className="mt-1 font-display text-2xl font-bold tracking-tight">
                 v {nameOf(v.oppId)}
               </p>
               {myRank && (
@@ -539,7 +539,7 @@ async function PlayerHome({
                   ✅ Rink {upNext.rink} is clear — you&apos;re up now!
                 </p>
               )}
-              <p className="mt-3 text-sm font-medium text-brand-dark">
+              <p className="mt-3 text-sm font-medium text-pink-dark">
                 {ready
                   ? "Tap to enter the score →"
                   : "Waiting for your opponent to be decided"}

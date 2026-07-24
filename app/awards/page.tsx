@@ -257,7 +257,10 @@ export default async function AwardsPage() {
                 key={award.key}
                 className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5"
               >
-                <h3 className="text-lg font-semibold">
+                <h3
+                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-base font-semibold"
+                  style={{ backgroundColor: award.tint, color: award.ink }}
+                >
                   {award.emoji} {award.title}
                 </h3>
                 {winners.length === 0 ? (
