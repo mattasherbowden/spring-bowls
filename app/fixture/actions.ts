@@ -66,12 +66,13 @@ export async function submitScore(
     .maybeSingle();
   const { data: prof } = await admin
     .from("profile")
-    .select("is_owner, display_name")
+    .select("is_owner, is_admin, display_name")
     .eq("id", user.id)
     .maybeSingle();
   const isMember =
     !!me && (me.team_id === fixture.team_a_id || me.team_id === fixture.team_b_id);
-  const isAdmin = !!prof?.is_owner || me?.role === "admin";
+  const isAdmin =
+    !!prof?.is_owner || !!prof?.is_admin || me?.role === "admin";
   if (!isMember && !isAdmin) return { error: "You are not in this game." };
 
   // Compute the result server-side (no client-supplied winner is trusted).
@@ -157,10 +158,10 @@ export async function unlockFixture(
     .maybeSingle();
   const { data: prof } = await admin
     .from("profile")
-    .select("is_owner")
+    .select("is_owner, is_admin")
     .eq("id", user.id)
     .maybeSingle();
-  if (!prof?.is_owner && me?.role !== "admin") {
+  if (!prof?.is_owner && !prof?.is_admin && me?.role !== "admin") {
     return { error: "Only an admin can unlock a score." };
   }
 

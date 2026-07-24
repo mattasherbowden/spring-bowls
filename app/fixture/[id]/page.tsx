@@ -65,13 +65,14 @@ export default async function FixturePage({
     .maybeSingle();
   const { data: prof } = await supabase
     .from("profile")
-    .select("is_owner")
+    .select("is_owner, is_admin")
     .eq("id", user.id)
     .maybeSingle();
 
   const isMember =
     !!me && (me.team_id === fixture.team_a_id || me.team_id === fixture.team_b_id);
-  const isAdmin = !!prof?.is_owner || me?.role === "admin";
+  const isAdmin =
+    !!prof?.is_owner || !!prof?.is_admin || me?.role === "admin";
   const done = fixture.status === "completed" || fixture.status === "walkover";
   const bothSet = !!fixture.team_a_id && !!fixture.team_b_id;
 

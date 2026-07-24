@@ -5,7 +5,11 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createAuthUser, deleteAuthUser } from "@/lib/supabase/auth-admin";
+import {
+  createAuthUser,
+  deleteAuthUser,
+  setAuthUserPassword,
+} from "@/lib/supabase/auth-admin";
 import { suggestUsername, generatePassword } from "@/lib/domain/credentials";
 import { splitIntoGroups } from "@/lib/domain/planner";
 import { drawGroups, buildGroupSchedule } from "@/lib/domain/schedule";
@@ -281,6 +285,96 @@ export async function saveEvent(
   if (error) return { error: `Could not save: ${error.message}` };
   revalidatePath("/");
   return { done: true };
+}
+
+// ---------- helper (admin) accounts: standalone, tournament-independent ----------
+
+export type HelperState = {
+  error?: string;
+  created?: { displayName: string; username: string; password: string };
+};
+
+export async function createHelper(
+  _prev: HelperState,
+  fd: FormData,
+): Promise<HelperState> {
+  const ownerId = await currentOwnerId();
+  if (!ownerId) return { error: "Only the owner can add helpers." };
+  const displayName = String(fd.get("displayName") ?? "").trim();
+  if (!displayName) return { error: "Enter the helper's name." };
+
+  const admin = createAdminClient();
+  const username = await uniqueUsername(admin, displayName);
+  const password = generatePassword();
+  const email = `${username.toLowerCase()}@${EMAIL_DOMAIN}`;
+
+  const created = await createAuthUser(email, password);
+  if ("error" in created) {
+    return { error: `Could not create the login (${created.error}).` };
+  }
+  const { error: profErr } = await admin.from("profile").insert({
+    id: created.id,
+    username,
+    display_name: displayName,
+    is_owner: false,
+    is_admin: true,
+  });
+  if (profErr) {
+    await deleteAuthUser(created.id);
+    return { error: `Could not save the helper (${profErr.message}).` };
+  }
+  revalidatePath("/setup/helpers");
+  return { created: { displayName, username, password } };
+}
+
+export type HelperActionState = {
+  error?: string;
+  reset?: { username: string; password: string };
+};
+
+export async function resetHelperPassword(
+  _prev: HelperActionState,
+  fd: FormData,
+): Promise<HelperActionState> {
+  const ownerId = await currentOwnerId();
+  if (!ownerId) return { error: "Only the owner can do this." };
+  const id = String(fd.get("profileId") ?? "");
+
+  const admin = createAdminClient();
+  const { data: p } = await admin
+    .from("profile")
+    .select("username, is_admin, is_owner")
+    .eq("id", id)
+    .maybeSingle();
+  if (!p || p.is_owner || !p.is_admin) {
+    return { error: "That is not a helper account." };
+  }
+  const password = generatePassword();
+  const ok = await setAuthUserPassword(id, password);
+  if (!ok) return { error: "Could not reset the password." };
+  return { reset: { username: p.username as string, password } };
+}
+
+export async function removeHelper(
+  _prev: HelperActionState,
+  fd: FormData,
+): Promise<HelperActionState> {
+  const ownerId = await currentOwnerId();
+  if (!ownerId) return { error: "Only the owner can do this." };
+  const id = String(fd.get("profileId") ?? "");
+
+  const admin = createAdminClient();
+  const { data: p } = await admin
+    .from("profile")
+    .select("is_admin, is_owner")
+    .eq("id", id)
+    .maybeSingle();
+  if (!p || p.is_owner || !p.is_admin) {
+    return { error: "That is not a helper account." };
+  }
+  await deleteAuthUser(id); // cascades the profile row
+  revalidatePath("/setup/helpers");
+  return {};
 }
 
 export async function refreshKnockout(): Promise<void> {

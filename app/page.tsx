@@ -191,7 +191,7 @@ export default async function Home() {
 
   const { data: profile } = await supabase
     .from("profile")
-    .select("display_name, is_owner")
+    .select("display_name, is_owner, is_admin")
     .eq("id", user.id)
     .single();
   const { data: tournament } = await supabase
@@ -234,11 +234,15 @@ export default async function Home() {
       <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
         <h2 className="text-lg font-semibold">
           Welcome, {firstName}
-          {profile?.is_owner && (
+          {profile?.is_owner ? (
             <span className="ml-2 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand-dark">
               owner
             </span>
-          )}
+          ) : profile?.is_admin ? (
+            <span className="ml-2 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand-dark">
+              helper
+            </span>
+          ) : null}
         </h2>
         {profile?.is_owner ? (
           tournament ? (
@@ -280,6 +284,21 @@ export default async function Home() {
               </Link>
             </div>
           )
+        ) : profile?.is_admin ? (
+          <div className="mt-4">
+            <p className="text-sm text-foreground/70">
+              You&apos;re a helper — you can enter or fix any game&apos;s score.
+            </p>
+            <p className="mt-1 text-xs text-foreground/50">
+              Open the schedule, tap a game, then enter or reset its score.
+            </p>
+            <Link
+              href="/schedule"
+              className="mt-3 inline-block rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark"
+            >
+              Schedule &amp; fix scores
+            </Link>
+          </div>
         ) : (
           <p className="mt-4 text-sm text-foreground/70">
             Your games will appear here once the tournament starts.
@@ -292,6 +311,12 @@ export default async function Home() {
               className="text-sm font-medium text-brand hover:text-brand-dark"
             >
               Edit event details →
+            </Link>
+            <Link
+              href="/setup/helpers"
+              className="text-sm font-medium text-brand hover:text-brand-dark"
+            >
+              Manage helpers →
             </Link>
             <Link
               href="/setup/owner"
