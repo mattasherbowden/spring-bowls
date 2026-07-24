@@ -140,7 +140,7 @@ function makeRecoveryCode(): string {
   return `${word()}-${word()}-${randomInt(1000, 10000)}`;
 }
 
-export type RecoveryState = { error?: string; code?: string };
+export type RecoveryState = { error?: string; code?: string; done?: boolean };
 
 export async function generateRecoveryCode(
   _prev: RecoveryState,
@@ -195,4 +195,31 @@ export async function recoverPassword(
   const ok = await setAuthUserPassword(prof.id, newPassword);
   if (!ok) return { error: "Could not reset the password — please try again." };
   redirect("/");
+}
+
+export async function changeOwnerPassword(
+  _prev: RecoveryState,
+  fd: FormData,
+): Promise<RecoveryState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Please log in." };
+
+  const admin = createAdminClient();
+  const { data: prof } = await admin
+    .from("profile")
+    .select("is_owner")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!prof?.is_owner) return { error: "Only the owner can change it here." };
+
+  const newPassword = String(fd.get("password") ?? "");
+  if (newPassword.length < 8) {
+    return { error: "Password must be at least 8 characters." };
+  }
+  const ok = await setAuthUserPassword(user.id, newPassword);
+  if (!ok) return { error: "Could not change the password — please try again." };
+  return { done: true };
 }

@@ -1,7 +1,12 @@
 "use client";
 
 import { useActionState } from "react";
-import { generateRecoveryCode, type RecoveryState } from "../../actions";
+import {
+  generateRecoveryCode,
+  changeOwnerPassword,
+  type RecoveryState,
+} from "../../actions";
+import { Field, SubmitButton, ErrorNote } from "../../_components/form-bits";
 
 export function RecoveryPanel({ hasCode }: { hasCode: boolean }) {
   const [state, action, pending] = useActionState(
@@ -48,5 +53,27 @@ export function RecoveryPanel({ hasCode }: { hasCode: boolean }) {
         )}
       </form>
     </div>
+  );
+}
+
+export function ChangePasswordForm() {
+  const [state, action, pending] = useActionState(
+    changeOwnerPassword,
+    {} as RecoveryState,
+  );
+  return (
+    <form action={action} className="mt-3 flex flex-col gap-3">
+      <Field
+        id="password"
+        label="New password"
+        type="password"
+        placeholder="at least 8 characters"
+      />
+      <SubmitButton pending={pending}>Change password</SubmitButton>
+      {state.done && (
+        <p className="text-sm font-medium text-brand-dark">Password changed ✓</p>
+      )}
+      {state.error && <ErrorNote>{state.error}</ErrorNote>}
+    </form>
   );
 }
