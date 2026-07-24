@@ -1,9 +1,14 @@
 "use server";
 
+import { createHash, randomInt } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createAuthUser, deleteAuthUser } from "@/lib/supabase/auth-admin";
+import {
+  createAuthUser,
+  deleteAuthUser,
+  setAuthUserPassword,
+} from "@/lib/supabase/auth-admin";
 
 const USERNAME_RE = /^[A-Za-z0-9._-]{2,32}$/;
 const EMAIL_DOMAIN = "springbowls.local";
@@ -108,5 +113,86 @@ export async function createOwner(
 export async function logout(): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut();
+  redirect("/");
+}
+
+// ---------- owner recovery (no email, so a recovery code) ----------
+
+const RECOVERY_WORDS = [
+  "green",
+  "jack",
+  "rink",
+  "bowl",
+  "spring",
+  "mat",
+  "ditch",
+  "draw",
+  "skip",
+  "lead",
+];
+
+function hashCode(code: string): string {
+  return createHash("sha256").update(code.trim().toLowerCase()).digest("hex");
+}
+
+function makeRecoveryCode(): string {
+  const word = () => RECOVERY_WORDS[randomInt(RECOVERY_WORDS.length)];
+  return `${word()}-${word()}-${randomInt(1000, 10000)}`;
+}
+
+export type RecoveryState = { error?: string; code?: string };
+
+export async function generateRecoveryCode(
+  _prev: RecoveryState,
+  _fd: FormData,
+): Promise<RecoveryState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Please log in." };
+
+  const admin = createAdminClient();
+  const { data: prof } = await admin
+    .from("profile")
+    .select("is_owner")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!prof?.is_owner) return { error: "Only the owner has a recovery code." };
+
+  const code = makeRecoveryCode();
+  await admin
+    .from("profile")
+    .update({ recovery_hash: hashCode(code) })
+    .eq("id", user.id);
+  return { code };
+}
+
+export async function recoverPassword(
+  _prev: RecoveryState,
+  fd: FormData,
+): Promise<RecoveryState> {
+  const username = String(fd.get("username") ?? "").trim();
+  const code = String(fd.get("code") ?? "").trim();
+  const newPassword = String(fd.get("password") ?? "");
+  if (!username || !code || newPassword.length < 8) {
+    return {
+      error:
+        "Enter your username, recovery code, and a new password (8+ characters).",
+    };
+  }
+
+  const admin = createAdminClient();
+  const { data: prof } = await admin
+    .from("profile")
+    .select("id, recovery_hash")
+    .eq("username_canonical", username.toLowerCase())
+    .maybeSingle();
+  if (!prof?.recovery_hash || prof.recovery_hash !== hashCode(code)) {
+    return { error: "That username and recovery code do not match." };
+  }
+
+  const ok = await setAuthUserPassword(prof.id, newPassword);
+  if (!ok) return { error: "Could not reset the password — please try again." };
   redirect("/");
 }

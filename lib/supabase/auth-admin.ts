@@ -44,3 +44,15 @@ export async function deleteAuthUser(id: string): Promise<void> {
     headers: adminHeaders(),
   });
 }
+
+export async function setAuthUserPassword(
+  id: string,
+  password: string,
+): Promise<boolean> {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${id}`, {
+    method: "PUT",
+    headers: adminHeaders(),
+    body: JSON.stringify({ password }),
+  });
+  return res.ok;
+}

@@ -195,6 +195,14 @@ export default async function Home() {
             Your games will appear here once the tournament starts.
           </p>
         )}
+        {profile?.is_owner && (
+          <Link
+            href="/setup/owner"
+            className="mt-4 block text-sm font-medium text-brand hover:text-brand-dark"
+          >
+            Account &amp; recovery →
+          </Link>
+        )}
       </section>
     </Shell>
   );

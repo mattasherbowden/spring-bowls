@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { login, type AuthState } from "../actions";
 import { Field, SubmitButton, ErrorNote } from "./form-bits";
@@ -24,6 +25,12 @@ export function LoginForm() {
         {pending ? "Logging in…" : "Log in"}
       </SubmitButton>
       {state.error && <ErrorNote>{state.error}</ErrorNote>}
+      <Link
+        href="/recover"
+        className="text-center text-xs text-foreground/50 hover:text-foreground/70"
+      >
+        Forgot your password?
+      </Link>
     </form>
   );
 }
