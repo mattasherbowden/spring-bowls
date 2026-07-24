@@ -257,12 +257,17 @@ export default async function SchedulePage() {
                       <div className="mt-1 space-y-2">
                         {round.matches.map((k) => {
                           const done = k.status === "completed";
-                          const slotA = k.team_a_id
-                            ? teamName(k.team_a_id)
-                            : `TBA · ${sourceLabel(k.team_a_source)}`;
-                          const slotB = k.team_b_id
-                            ? teamName(k.team_b_id)
-                            : `TBA · ${sourceLabel(k.team_b_source)}`;
+                          const slot = (
+                            id: string | null,
+                            source: string | null,
+                          ) =>
+                            id
+                              ? teamName(id)
+                              : source
+                                ? `TBA · ${sourceLabel(source)}`
+                                : "Bye";
+                          const slotA = slot(k.team_a_id, k.team_a_source);
+                          const slotB = slot(k.team_b_id, k.team_b_source);
                           const inner = (
                             <div className="rounded-lg border border-black/10 p-2 text-sm">
                               <div className="flex items-center justify-between">

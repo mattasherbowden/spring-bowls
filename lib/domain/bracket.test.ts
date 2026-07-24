@@ -32,4 +32,31 @@ describe("buildBracket", () => {
       semis.findIndex((m) => m.a === label || m.b === label);
     expect(inSemi("A1")).not.toBe(inSemi("B1"));
   });
+
+  it("never pairs two teams from the same group in the first round", () => {
+    const groupOf = (l: string) => l.replace(/\d+$/, "");
+    const fields = [
+      ["A1", "B1", "C1", "A2", "B2", "C2"], // 3 groups -> 8 w/ 2 byes
+      ["A1", "B1", "C1", "D1", "A2", "B2", "C2", "D2"], // 4 groups -> 8 exact
+      ["A1", "B1", "A2", "B2"], // 2 groups -> 4
+    ];
+    for (const quals of fields) {
+      const first = buildBracket(quals)[0].matches;
+      for (const m of first) {
+        if (m.a && m.b) expect(groupOf(m.a)).not.toBe(groupOf(m.b));
+      }
+    }
+  });
+
+  it("keeps a group's two teams apart until the final", () => {
+    const b = buildBracket(["A1", "B1", "C1", "A2", "B2", "C2"]);
+    // A1 and A2 should only be able to meet by both reaching the final.
+    const inHalf = (label: string) => {
+      const qf = b[0].matches.findIndex((m) => m.a === label || m.b === label);
+      return qf < b[0].matches.length / 2 ? 0 : 1; // top half vs bottom half
+    };
+    for (const g of ["A", "B", "C"]) {
+      expect(inHalf(`${g}1`)).not.toBe(inHalf(`${g}2`));
+    }
+  });
 });

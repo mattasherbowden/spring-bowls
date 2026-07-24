@@ -38,10 +38,26 @@ function roundName(count: number): string {
   return `Round of ${count}`;
 }
 
+// The group a qualifier label belongs to — "A1" -> "A", "B2" -> "B".
+function groupOf(label: string): string {
+  return label.replace(/\d+$/, "");
+}
+
+// The round (1 = first round, 2 = next, …) at which bracket positions i and j
+// would meet, from the binary structure of the bracket.
+function meetRound(i: number, j: number): number {
+  let r = 1;
+  while (i >> r !== j >> r) r++;
+  return r;
+}
+
 /**
  * Build a single-elimination bracket from seeded qualifier labels (best seed
- * first). Top seeds are spread apart and get byes when the field isn't a power
- * of two. Later-round slots read "W:<matchId>" (the winner of that match).
+ * first, e.g. group winners then runners-up). Top seeds are spread apart and
+ * get byes when the field isn't a power of two — AND teams from the same group
+ * are placed as far apart as possible, so they can't meet again until as late
+ * as the bracket allows (ideally the final). Later-round slots read
+ * "W:<matchId>" (the winner of that match); a null slot is a bye.
  */
 export function buildBracket(qualifierLabels: string[]): BracketRound[] {
   const n = qualifierLabels.length;
@@ -49,26 +65,67 @@ export function buildBracket(qualifierLabels: string[]): BracketRound[] {
 
   const size = nextPow2(n);
   const order = seedOrder(size);
-  let slots: (string | null)[] = order.map((s) =>
-    s <= n ? qualifierLabels[s - 1] : null,
-  );
+  // The canonical bracket position for each seed (1-indexed seed -> position).
+  const posOfSeed = new Array<number>(size);
+  order.forEach((seed, pos) => {
+    posOfSeed[seed] = pos;
+  });
+
+  const slots: (string | null)[] = new Array(size).fill(null);
+  const placedByGroup = new Map<string, number[]>();
+
+  // Place best seed first. Each team goes to the empty position that keeps it
+  // furthest (latest meeting round) from its already-placed group-mates; ties
+  // break toward the team's canonical seed position (so byes still fall to the
+  // top seeds), then the lowest index for determinism.
+  for (let seed = 1; seed <= n; seed++) {
+    const label = qualifierLabels[seed - 1];
+    const group = groupOf(label);
+    const mates = placedByGroup.get(group) ?? [];
+    const canonical = posOfSeed[seed];
+
+    let best = -1;
+    let bestSep = -1;
+    let bestCanonical = false;
+    for (let p = 0; p < size; p++) {
+      if (slots[p] !== null) continue;
+      const sep =
+        mates.length === 0
+          ? Number.POSITIVE_INFINITY
+          : Math.min(...mates.map((m) => meetRound(p, m)));
+      const isCanonical = p === canonical;
+      const better =
+        sep > bestSep ||
+        (sep === bestSep && isCanonical && !bestCanonical) ||
+        (sep === bestSep && isCanonical === bestCanonical && best === -1);
+      if (better) {
+        best = p;
+        bestSep = sep;
+        bestCanonical = isCanonical;
+      }
+    }
+
+    slots[best] = label;
+    placedByGroup.set(group, [...mates, best]);
+  }
 
   const rounds: BracketRound[] = [];
-  while (slots.length > 1) {
-    const tag = roundTag(slots.length);
+  let cur: (string | null)[] = slots;
+  while (cur.length > 1) {
+    const tag = roundTag(cur.length);
     const matches: BracketMatch[] = [];
     const next: (string | null)[] = [];
-    for (let i = 0; i < slots.length; i += 2) {
-      const a = slots[i];
-      const b = slots[i + 1];
+    for (let i = 0; i < cur.length; i += 2) {
+      const a = cur[i];
+      const b = cur[i + 1];
       const id = `${tag}${matches.length + 1}`;
       matches.push({ id, a, b });
       if (a !== null && b === null) next.push(a);
       else if (b !== null && a === null) next.push(b);
       else next.push(`W:${id}`);
     }
-    rounds.push({ name: roundName(slots.length), matches });
-    slots = next;
+    rounds.push({ name: roundName(cur.length), matches });
+    cur = next;
   }
   return rounds;
 }

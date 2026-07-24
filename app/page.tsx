@@ -58,17 +58,34 @@ function formatEventDate(iso: string): string {
   return `${date} · ${time}`;
 }
 
-function greetingForLondon(): string {
-  const hour = Number(
-    new Intl.DateTimeFormat("en-GB", {
-      hour: "numeric",
-      hour12: false,
-      timeZone: "Europe/London",
-    }).format(new Date()),
-  );
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
+// A mix of British and Kiwi/Aussie greetings — a fresh one each page load.
+const GREETINGS = [
+  "G'day",
+  "Gidday",
+  "Kia ora",
+  "Chur",
+  "Howzit",
+  "Sweet as",
+  "Alright",
+  "Ay up",
+  "Now then",
+  "Wotcher",
+  "Watcha",
+  "Hiya",
+  "How do",
+  "Oi oi",
+  "Ello ello",
+  "Easy now",
+  "Alright mate",
+  "G'day mate",
+  "Howdy",
+  "Oright",
+  "Well hello",
+  "Yeeew",
+];
+
+function randomGreeting(): string {
+  return GREETINGS[Math.floor(Math.random() * GREETINGS.length)];
 }
 
 function EventInfo({ ev }: { ev: EventInfoData }) {
@@ -515,7 +532,7 @@ async function PlayerHome({
     <>
       <section className="mt-8">
         <h2 className="font-display text-xl font-semibold">
-          {greetingForLondon()}, {firstName}
+          {randomGreeting()}, {firstName}
         </h2>
         <p className="text-sm text-foreground/60">
           {nameOf(teamId)} · Group {groupLabel ?? "—"}
