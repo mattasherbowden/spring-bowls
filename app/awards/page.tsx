@@ -233,6 +233,14 @@ export default async function AwardsPage() {
         <p className="mt-6 text-center text-sm text-foreground/60">
           🎉 That&apos;s a wrap — here are your winners.
         </p>
+        <div className="mt-2 text-center">
+          <Link
+            href="/awards/results"
+            className="text-sm font-medium text-brand hover:text-brand-dark"
+          >
+            📊 See the full tally →
+          </Link>
+        </div>
         {champion && (
           <section className="mt-4 rounded-2xl bg-brand/10 p-5 text-center ring-1 ring-brand/30">
             <p className="text-xs font-semibold uppercase tracking-wide text-brand-dark">
@@ -302,6 +310,12 @@ export default async function AwardsPage() {
         Two votes per award, to two different nominees. You can change them until
         voting closes. You can&apos;t vote for yourself or your own team.
       </p>
+      <Link
+        href="/awards/results"
+        className="mt-3 inline-block text-sm font-medium text-brand hover:text-brand-dark"
+      >
+        📊 See live results →
+      </Link>
       <div className="mt-4 space-y-3">
         {AWARDS.map((award) => (
           <AwardCard
