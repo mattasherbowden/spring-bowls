@@ -30,10 +30,13 @@ export function ScoreForm({
   const level = totalA === totalB;
   const anyBlank = ends.some((e) => e.shotsA === "" || e.shotsB === "");
 
-  const set = (i: number, side: "shotsA" | "shotsB", val: string) =>
+  const set = (i: number, side: "shotsA" | "shotsB", val: string) => {
+    // Digits only — no letters (e.g. "e"), decimals or signs. Cap at 3 digits.
+    const clean = val.replace(/\D/g, "").slice(0, 3);
     setEnds((prev) =>
-      prev.map((e, idx) => (idx === i ? { ...e, [side]: val } : e)),
+      prev.map((e, idx) => (idx === i ? { ...e, [side]: clean } : e)),
     );
+  };
 
   const payload = ends.map((e, i) => ({
     shotsA: Number(e.shotsA) || 0,
@@ -65,12 +68,14 @@ export function ScoreForm({
           </span>
           <input
             inputMode="numeric"
+            pattern="[0-9]*"
             value={e.shotsA}
             onChange={(ev) => set(i, "shotsA", ev.target.value)}
             className="w-16 rounded-lg border border-black/10 px-2 py-2 text-center text-base text-black outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
           />
           <input
             inputMode="numeric"
+            pattern="[0-9]*"
             value={e.shotsB}
             onChange={(ev) => set(i, "shotsB", ev.target.value)}
             className="w-16 rounded-lg border border-black/10 px-2 py-2 text-center text-base text-black outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"

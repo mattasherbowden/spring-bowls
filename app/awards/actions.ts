@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { AWARD_BY_KEY, VOTES_PER_AWARD } from "@/lib/domain/awards";
+import { AWARD_BY_KEY } from "@/lib/domain/awards";
 
 export type VoteState = { error?: string };
 
@@ -85,9 +85,9 @@ export async function castVote(
 
   if (mine) {
     await admin.from("award_vote").delete().eq("id", mine.id);
-  } else if (rows.length >= VOTES_PER_AWARD) {
+  } else if (rows.length >= award.votes) {
     return {
-      error: `You've used both votes for ${award.title} — tap one of your picks to change it.`,
+      error: `You've used all ${award.votes} votes for ${award.title} — tap one of your picks to change it.`,
     };
   } else {
     const { error } = await admin.from("award_vote").insert({

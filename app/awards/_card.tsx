@@ -30,7 +30,8 @@ export function AwardCard({
         {award.emoji} {award.title}
       </h3>
       <p className="mt-0.5 text-sm text-foreground/60">
-        {award.blurb} · pick up to 2 ({picks.length}/2 used)
+        {award.blurb} · pick up to {award.votes} ({picks.length}/{award.votes}{" "}
+        used)
       </p>
       <form action={action} className="mt-3 flex flex-wrap gap-2">
         <input type="hidden" name="awardKey" value={award.key} />

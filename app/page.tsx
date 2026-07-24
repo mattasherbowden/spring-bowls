@@ -609,10 +609,13 @@ async function PlayerHome({
         <div className="mt-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
           <p className="text-sm font-medium">
             All your games are done
-            {myRank ? ` — ${ordinal(myRank)} in Group ${groupLabel}` : ""}.
+            {myRank
+              ? ` — currently ${ordinal(myRank)} in Group ${groupLabel}`
+              : ""}
+            .
           </p>
           <p className="mt-1 text-sm text-foreground/60">
-            Sit tight for the knockout and the ceremony.
+            Your knockout game will appear here as soon as the groups finish.
           </p>
         </div>
       )}
@@ -671,7 +674,12 @@ async function PlayerHome({
       )}
 
       <section className="mt-6 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
-        <h3 className="text-sm font-semibold">Group {groupLabel ?? "—"}</h3>
+        <div className="flex items-baseline justify-between">
+          <h3 className="text-sm font-semibold">Group {groupLabel ?? "—"}</h3>
+          <span className="text-xs font-semibold text-brand-dark">
+            Top {advance} go through
+          </span>
+        </div>
         <table className="mt-2 w-full text-sm">
           <thead>
             <tr className="text-xs text-foreground/50">
@@ -686,13 +694,9 @@ async function PlayerHome({
             {table.map((row) => (
               <tr
                 key={row.teamId}
-                className={
-                  row.teamId === teamId
-                    ? "font-semibold text-brand-dark"
-                    : row.rank <= advance
-                      ? "bg-brand/5"
-                      : ""
-                }
+                className={`${row.rank <= advance ? "bg-brand/20" : ""} ${
+                  row.teamId === teamId ? "font-semibold text-brand-dark" : ""
+                }`}
               >
                 <td className="py-1">{nameOf(row.teamId)}</td>
                 <td className="text-center">{row.played}</td>

@@ -204,7 +204,12 @@ export default async function SchedulePage() {
                   key={label}
                   className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5"
                 >
-                  <h2 className="text-sm font-semibold">Group {label}</h2>
+                  <div className="flex items-baseline justify-between">
+                    <h2 className="text-sm font-semibold">Group {label}</h2>
+                    <span className="text-xs font-semibold text-brand-dark">
+                      Top {tournament.advance} go through
+                    </span>
+                  </div>
                   <table className="mt-2 w-full text-sm">
                     <thead>
                       <tr className="text-xs text-foreground/50">
@@ -220,7 +225,7 @@ export default async function SchedulePage() {
                         <tr
                           key={row.teamId}
                           className={
-                            row.rank <= tournament.advance ? "bg-brand/5" : ""
+                            row.rank <= tournament.advance ? "bg-brand/20" : ""
                           }
                         >
                           <td className="py-1">{teamName(row.teamId)}</td>
@@ -236,9 +241,6 @@ export default async function SchedulePage() {
                       ))}
                     </tbody>
                   </table>
-                  <p className="mt-1 text-xs text-foreground/40">
-                    Shaded = qualifying (top {tournament.advance})
-                  </p>
                 </section>
               );
             })}
