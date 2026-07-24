@@ -624,11 +624,21 @@ async function PlayerHome({
                   ✅ Rink {upNext.rink} is clear — you&apos;re up now!
                 </p>
               )}
-              <p className="mt-3 text-sm font-medium text-brand-dark">
-                {ready
-                  ? "Tap to enter the score →"
-                  : "Waiting for your opponent to be decided"}
-              </p>
+              {ready ? (
+                <>
+                  <p className="mt-3 text-base font-bold text-brand-dark">
+                    Tap to enter the score →
+                  </p>
+                  <p className="mt-0.5 text-xs text-foreground/60">
+                    Either team can enter it once you&apos;ve played — first one
+                    in locks it.
+                  </p>
+                </>
+              ) : (
+                <p className="mt-3 text-sm font-medium text-brand-dark">
+                  Waiting for your opponent to be decided
+                </p>
+              )}
             </div>
           );
           return ready ? (
