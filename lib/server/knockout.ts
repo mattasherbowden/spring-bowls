@@ -10,19 +10,40 @@ export async function resolveKnockout(
   admin: SupabaseClient,
   tournamentId: string,
 ): Promise<void> {
-  const { data: t } = await admin
-    .from("tournament")
-    .select("advance, rink_count")
-    .eq("id", tournamentId)
-    .maybeSingle();
+  const koSelect =
+    "id, match_code, team_a_source, team_b_source, team_a_id, team_b_id, status, winner_team_id";
+
+  // These four reads are independent — fetch them together to cut round-trips.
+  const [
+    { data: t },
+    { data: teamsData },
+    { data: groupFxData },
+    { data: koData },
+  ] = await Promise.all([
+    admin
+      .from("tournament")
+      .select("advance, rink_count")
+      .eq("id", tournamentId)
+      .maybeSingle(),
+    admin
+      .from("team")
+      .select("id, group_label")
+      .eq("tournament_id", tournamentId),
+    admin
+      .from("fixture")
+      .select("group_label, team_a_id, team_b_id, status, shots_a, shots_b")
+      .eq("tournament_id", tournamentId)
+      .eq("stage", "group"),
+    admin
+      .from("fixture")
+      .select(koSelect)
+      .eq("tournament_id", tournamentId)
+      .eq("stage", "knockout"),
+  ]);
   if (!t) return;
   const advance = t.advance as number;
   const rinkCount = Math.max(1, t.rink_count as number);
 
-  const { data: teamsData } = await admin
-    .from("team")
-    .select("id, group_label")
-    .eq("tournament_id", tournamentId);
   const teams = teamsData ?? [];
   const groupLabels = [
     ...new Set(teams.map((x) => x.group_label).filter((l): l is string => !!l)),
@@ -35,20 +56,7 @@ export async function resolveKnockout(
       groupSize.set(tm.group_label, (groupSize.get(tm.group_label) ?? 0) + 1);
   }
 
-  const { data: groupFxData } = await admin
-    .from("fixture")
-    .select("group_label, team_a_id, team_b_id, status, shots_a, shots_b")
-    .eq("tournament_id", tournamentId)
-    .eq("stage", "group");
   const groupFixtures = groupFxData ?? [];
-
-  const koSelect =
-    "id, match_code, team_a_source, team_b_source, team_a_id, team_b_id, status, winner_team_id";
-  const { data: koData } = await admin
-    .from("fixture")
-    .select(koSelect)
-    .eq("tournament_id", tournamentId)
-    .eq("stage", "knockout");
   let knockout = koData ?? [];
 
   // Create the bracket the first time.
@@ -135,6 +143,7 @@ export async function resolveKnockout(
 
   let scheduledCount = knockout.filter((k) => k.status !== "pending").length;
 
+  const writes: Promise<unknown>[] = [];
   for (const k of knockout) {
     if (k.status === "completed" || k.status === "walkover") continue;
     const a = resolveSrc(k.team_a_source);
@@ -149,7 +158,8 @@ export async function resolveKnockout(
       scheduledCount++;
     }
     if (Object.keys(update).length > 0) {
-      await admin.from("fixture").update(update).eq("id", k.id);
+      writes.push(admin.from("fixture").update(update).eq("id", k.id));
     }
   }
+  await Promise.all(writes);
 }

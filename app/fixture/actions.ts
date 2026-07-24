@@ -41,34 +41,38 @@ export async function submitScore(
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Please log in again." };
-
   const admin = createAdminClient();
-  const { data: fixture } = await admin
-    .from("fixture")
-    .select("id, tournament_id, team_a_id, team_b_id, status")
-    .eq("id", fixtureId)
-    .maybeSingle();
+
+  // Auth check and fixture read don't depend on each other — run together.
+  const [{ data: authData }, { data: fixture }] = await Promise.all([
+    supabase.auth.getUser(),
+    admin
+      .from("fixture")
+      .select("id, tournament_id, team_a_id, team_b_id, status")
+      .eq("id", fixtureId)
+      .maybeSingle(),
+  ]);
+  const user = authData.user;
+  if (!user) return { error: "Please log in again." };
   if (!fixture) return { error: "Game not found." };
   if (!OPEN.includes(fixture.status)) {
     return { error: "This game's score is already in." };
   }
 
   // Authorize: a member of one of the two teams, or an admin/owner.
-  const { data: me } = await admin
-    .from("player")
-    .select("team_id, role")
-    .eq("tournament_id", fixture.tournament_id)
-    .eq("profile_id", user.id)
-    .maybeSingle();
-  const { data: prof } = await admin
-    .from("profile")
-    .select("is_owner, is_admin, display_name")
-    .eq("id", user.id)
-    .maybeSingle();
+  const [{ data: me }, { data: prof }] = await Promise.all([
+    admin
+      .from("player")
+      .select("team_id, role")
+      .eq("tournament_id", fixture.tournament_id)
+      .eq("profile_id", user.id)
+      .maybeSingle(),
+    admin
+      .from("profile")
+      .select("is_owner, is_admin, display_name")
+      .eq("id", user.id)
+      .maybeSingle(),
+  ]);
   const isMember =
     !!me && (me.team_id === fixture.team_a_id || me.team_id === fixture.team_b_id);
   const isAdmin =
