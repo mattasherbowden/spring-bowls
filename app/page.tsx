@@ -38,13 +38,24 @@ type EventInfoData = {
 };
 
 function formatEventDate(iso: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
+  const d = new Date(iso);
+  const date = new Intl.DateTimeFormat("en-GB", {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
     timeZone: "Europe/London",
-  }).format(new Date(iso));
+  }).format(d);
+  const time = new Intl.DateTimeFormat("en-GB", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Europe/London",
+  })
+    .format(d)
+    .replace(/\s/g, "")
+    .toLowerCase();
+  return `${date} · ${time}`;
 }
 
 function EventInfo({ ev }: { ev: EventInfoData }) {
@@ -52,13 +63,37 @@ function EventInfo({ ev }: { ev: EventInfoData }) {
   const mapQuery = encodeURIComponent(
     `${ev.venue_name ?? ""} ${ev.venue_address ?? ""}`.trim(),
   );
+  // Split the free-text details into blank-line-separated sections so each reads
+  // as its own card instead of one pasted-message blob.
+  const sections = (ev.details ?? "")
+    .split(/\n\s*\n/)
+    .map((b) => b.trim())
+    .filter(Boolean)
+    .map((block) => {
+      const lines = block.split("\n");
+      return { title: lines[0].trim(), body: lines.slice(1).join("\n").trim() };
+    });
   return (
     <>
-      {ev.details && (
-        <section className="mt-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
-          <h2 className="text-lg font-semibold">On the day</h2>
-          <div className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground/80">
-            {ev.details}
+      {sections.length > 0 && (
+        <section className="mt-6">
+          <h2 className="px-1 text-lg font-semibold">On the day</h2>
+          <div className="mt-2 grid gap-2">
+            {sections.map((s, i) => (
+              <div
+                key={i}
+                className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5"
+              >
+                <h3 className="font-display text-base font-semibold">
+                  {s.title}
+                </h3>
+                {s.body && (
+                  <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-foreground/70">
+                    {s.body}
+                  </p>
+                )}
+              </div>
+            ))}
           </div>
         </section>
       )}
@@ -93,9 +128,11 @@ function EventInfo({ ev }: { ev: EventInfoData }) {
 function Shell({
   children,
   dateLabel,
+  eventAt,
 }: {
   children: ReactNode;
   dateLabel: string;
+  eventAt?: string | null;
 }) {
   return (
     <main className="flex flex-1 flex-col items-center px-5 py-10">
@@ -104,15 +141,20 @@ function Shell({
           <p className="text-sm font-medium uppercase tracking-[0.2em] text-brand">
             7th edition
           </p>
-          <h1 className="mt-2 font-display text-5xl font-bold tracking-tight">
+          <h1 className="mt-2 font-display text-5xl font-semibold tracking-tight">
             Spring <span className="text-pink">Bowls</span>
           </h1>
           <div className="mt-4 flex justify-center">
             <span className="rounded-full bg-white px-3 py-1 text-sm font-medium shadow-sm ring-1 ring-black/5">
-              🇬🇧 BYO Brit edition 🇳🇿
+              🇬🇧 BYO British Person Edition 🇳🇿
             </span>
           </div>
           <p className="mt-4 text-base text-foreground/70">{dateLabel}</p>
+          {eventAt && (
+            <div className="mt-4">
+              <Countdown target={eventAt} />
+            </div>
+          )}
         </header>
         {children}
       </div>
@@ -149,20 +191,8 @@ export default async function Home() {
   if (!user) {
     const { data: setupDone } = await supabase.rpc("owner_exists");
     return (
-      <Shell dateLabel={dateLabel}>
-        {ev?.event_at && (
-          <section className="mt-8 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
-            <p className="text-center text-xs font-semibold uppercase tracking-wide text-foreground/50">
-              Bowls begins in
-            </p>
-            <div className="mt-3">
-              <Countdown target={ev.event_at} />
-            </div>
-          </section>
-        )}
-        <section
-          className={`${ev?.event_at ? "mt-4" : "mt-8"} rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5`}
-        >
+      <Shell dateLabel={dateLabel} eventAt={ev?.event_at}>
+        <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
           {setupDone ? (
             <>
               <h2 className="text-lg font-semibold">Log in</h2>
@@ -216,7 +246,7 @@ export default async function Home() {
 
   if (tournament && teamId) {
     return (
-      <Shell dateLabel={dateLabel}>
+      <Shell dateLabel={dateLabel} eventAt={ev?.event_at}>
         <PlayerHome
           tournamentId={tournament.id}
           advance={tournament.advance}
@@ -230,7 +260,7 @@ export default async function Home() {
   }
 
   return (
-    <Shell dateLabel={dateLabel}>
+    <Shell dateLabel={dateLabel} eventAt={ev?.event_at}>
       <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
         <h2 className="text-lg font-semibold">
           Welcome, {firstName}
@@ -511,7 +541,7 @@ async function PlayerHome({
                   </span>
                 )}
               </div>
-              <p className="mt-1 font-display text-2xl font-bold tracking-tight">
+              <p className="mt-1 font-display text-2xl font-semibold tracking-tight">
                 v {nameOf(v.oppId)}
               </p>
               {myRank && (

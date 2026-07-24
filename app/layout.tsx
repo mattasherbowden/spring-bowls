@@ -18,7 +18,7 @@ const mono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Spring Bowls · BYO Brit edition",
+  title: "Spring Bowls · BYO British Person Edition",
   description:
     "The 7th Spring Bowls lawn-bowls tournament. Log in to see your next game, live scores, group tables and the awards.",
 };
