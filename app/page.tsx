@@ -552,6 +552,16 @@ async function PlayerHome({
 
       <div className="mt-4 flex gap-2">
         <Link
+          href="/photo"
+          className="flex-1 rounded-xl px-4 py-3 text-center text-sm font-semibold text-white transition hover:brightness-105"
+          style={{
+            background: "linear-gradient(135deg, #6fb1e0, #4f8fd0)",
+            boxShadow: "0 4px 12px -5px rgba(79,143,208,0.4)",
+          }}
+        >
+          📸 Photo Bomb
+        </Link>
+        <Link
           href="/awards"
           className="flex-1 rounded-xl px-4 py-3 text-center text-sm font-semibold text-white transition hover:brightness-105"
           style={{
@@ -559,25 +569,15 @@ async function PlayerHome({
             boxShadow: "0 4px 12px -5px rgba(217,117,160,0.4)",
           }}
         >
-          Vote for awards
-        </Link>
-        <Link
-          href="/schedule"
-          className="flex-1 rounded-xl border border-black/10 bg-white px-4 py-3 text-center text-sm font-medium hover:bg-black/[.03]"
-        >
-          See the draw
+          🏆 Vote for awards
         </Link>
       </div>
 
       <Link
-        href="/photo"
-        className="mt-2 block rounded-xl px-4 py-3 text-center text-sm font-semibold text-white transition hover:brightness-105"
-        style={{
-          background: "linear-gradient(135deg, #6fb1e0, #4f8fd0)",
-          boxShadow: "0 4px 12px -5px rgba(79,143,208,0.4)",
-        }}
+        href="/schedule"
+        className="mt-2 block rounded-xl border border-black/10 bg-white px-4 py-3 text-center text-sm font-medium hover:bg-black/[.03]"
       >
-        📸 Photo Bomb challenge
+        See the draw
       </Link>
 
       {upNext ? (
