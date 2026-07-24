@@ -1,0 +1,139 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { AWARD_BY_KEY, VOTES_PER_AWARD } from "@/lib/domain/awards";
+
+export type VoteState = { error?: string };
+
+export async function castVote(
+  _prev: VoteState,
+  fd: FormData,
+): Promise<VoteState> {
+  const awardKey = String(fd.get("awardKey") ?? "");
+  const targetType = String(fd.get("targetType") ?? "");
+  const targetId = String(fd.get("targetId") ?? "");
+
+  const award = AWARD_BY_KEY.get(awardKey);
+  if (!award) return { error: "Unknown award." };
+  if (targetType !== award.kind) return { error: "Invalid vote." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Please log in again." };
+
+  const admin = createAdminClient();
+  const { data: tournament } = await admin
+    .from("tournament")
+    .select("id, voting_status")
+    .neq("status", "archived")
+    .limit(1)
+    .maybeSingle();
+  if (!tournament) return { error: "No active tournament." };
+  if (tournament.voting_status !== "open") {
+    return { error: "Voting isn't open right now." };
+  }
+
+  // The voter's own roster row (if any) — for self / own-team exclusion.
+  const { data: voterPlayer } = await admin
+    .from("player")
+    .select("id, team_id")
+    .eq("tournament_id", tournament.id)
+    .eq("profile_id", user.id)
+    .maybeSingle();
+
+  // Validate the target is a real, eligible nominee in THIS tournament.
+  if (award.kind === "team") {
+    const { data: team } = await admin
+      .from("team")
+      .select("id")
+      .eq("id", targetId)
+      .eq("tournament_id", tournament.id)
+      .maybeSingle();
+    if (!team) return { error: "That team isn't in this tournament." };
+    if (voterPlayer && voterPlayer.team_id === targetId) {
+      return { error: "You can't vote for your own team." };
+    }
+  } else {
+    const { data: player } = await admin
+      .from("player")
+      .select("id, nationality")
+      .eq("id", targetId)
+      .eq("tournament_id", tournament.id)
+      .maybeSingle();
+    if (!player) return { error: "That player isn't in this tournament." };
+    if (voterPlayer && voterPlayer.id === targetId) {
+      return { error: "You can't vote for yourself." };
+    }
+    if (award.nationality && player.nationality !== award.nationality) {
+      return { error: "That player isn't eligible for this award." };
+    }
+  }
+
+  // Toggle: remove if already picked; otherwise add if under the limit.
+  const { data: existing } = await admin
+    .from("award_vote")
+    .select("id, target_id")
+    .eq("tournament_id", tournament.id)
+    .eq("award_key", awardKey)
+    .eq("voter_id", user.id);
+  const rows = existing ?? [];
+  const mine = rows.find((r) => r.target_id === targetId);
+
+  if (mine) {
+    await admin.from("award_vote").delete().eq("id", mine.id);
+  } else if (rows.length >= VOTES_PER_AWARD) {
+    return {
+      error: `You've used both votes for ${award.title} — tap one of your picks to change it.`,
+    };
+  } else {
+    const { error } = await admin.from("award_vote").insert({
+      tournament_id: tournament.id,
+      award_key: awardKey,
+      voter_id: user.id,
+      target_type: award.kind,
+      target_id: targetId,
+    });
+    if (error) return { error: "Could not save your vote — please try again." };
+  }
+
+  revalidatePath("/awards");
+  return {};
+}
+
+// Owner/helper control: open, close, or reset voting.
+export async function setVotingStatus(fd: FormData): Promise<void> {
+  const status = String(fd.get("status") ?? "");
+  if (!["pending", "open", "closed"].includes(status)) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const admin = createAdminClient();
+  const { data: prof } = await admin
+    .from("profile")
+    .select("is_owner, is_admin")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!prof?.is_owner && !prof?.is_admin) return;
+
+  const { data: tournament } = await admin
+    .from("tournament")
+    .select("id")
+    .neq("status", "archived")
+    .limit(1)
+    .maybeSingle();
+  if (!tournament) return;
+
+  await admin
+    .from("tournament")
+    .update({ voting_status: status })
+    .eq("id", tournament.id);
+  revalidatePath("/awards");
+}

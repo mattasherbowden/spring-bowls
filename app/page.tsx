@@ -298,6 +298,12 @@ export default async function Home() {
             >
               Schedule &amp; fix scores
             </Link>
+            <Link
+              href="/awards"
+              className="mt-2 block text-sm font-medium text-brand hover:text-brand-dark"
+            >
+              Awards &amp; voting →
+            </Link>
           </div>
         ) : (
           <p className="mt-4 text-sm text-foreground/70">
@@ -311,6 +317,12 @@ export default async function Home() {
               className="text-sm font-medium text-brand hover:text-brand-dark"
             >
               Edit event details →
+            </Link>
+            <Link
+              href="/awards"
+              className="text-sm font-medium text-brand hover:text-brand-dark"
+            >
+              Awards &amp; voting →
             </Link>
             <Link
               href="/setup/helpers"
@@ -583,12 +595,12 @@ async function PlayerHome({
         >
           See the draw
         </Link>
-        <button
-          disabled
-          className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-foreground/40"
+        <Link
+          href="/awards"
+          className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium hover:bg-black/[.03]"
         >
-          Vote for awards (soon)
-        </button>
+          Vote for awards
+        </Link>
       </div>
 
       {event && <EventInfo ev={event} />}
