@@ -21,12 +21,14 @@ export function EventForm({
   venueAddress,
   venuePhone,
   details,
+  albumUrl,
 }: {
   eventAt: string | null;
   venueName: string;
   venueAddress: string;
   venuePhone: string;
   details: string;
+  albumUrl: string;
 }) {
   const [dt, setDt] = useState("");
   useEffect(() => {
@@ -66,6 +68,18 @@ export function EventForm({
       <label className="block">
         <span className="text-sm font-medium">Venue phone</span>
         <input name="venuePhone" defaultValue={venuePhone} className={inputCls} />
+      </label>
+      <label className="block">
+        <span className="text-sm font-medium">Photo album link</span>
+        <span className="mt-0.5 block text-xs text-foreground/50">
+          The Apple Shared Album URL for the photo-bomb challenge.
+        </span>
+        <input
+          name="photoAlbumUrl"
+          defaultValue={albumUrl}
+          placeholder="https://www.icloud.com/sharedalbum/…"
+          className={inputCls}
+        />
       </label>
       <label className="block">
         <span className="text-sm font-medium">Details</span>

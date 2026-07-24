@@ -558,6 +558,17 @@ async function PlayerHome({
         </Link>
       </div>
 
+      <Link
+        href="/photo"
+        className="mt-2 block rounded-xl px-4 py-3 text-center text-sm font-semibold text-white transition hover:brightness-105"
+        style={{
+          background: "linear-gradient(135deg, #6fb1e0, #4f8fd0)",
+          boxShadow: "0 4px 12px -5px rgba(79,143,208,0.4)",
+        }}
+      >
+        📸 Photo Bomb challenge
+      </Link>
+
       {upNext ? (
         (() => {
           const v = view(upNext);

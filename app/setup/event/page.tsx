@@ -19,7 +19,9 @@ export default async function EventPage() {
 
   const { data: ev } = await supabase
     .from("event_settings")
-    .select("event_at, venue_name, venue_address, venue_phone, details")
+    .select(
+      "event_at, venue_name, venue_address, venue_phone, details, photo_album_url",
+    )
     .eq("id", 1)
     .maybeSingle();
 
@@ -48,6 +50,7 @@ export default async function EventPage() {
             venueAddress={ev?.venue_address ?? ""}
             venuePhone={ev?.venue_phone ?? ""}
             details={ev?.details ?? ""}
+            albumUrl={ev?.photo_album_url ?? ""}
           />
         </div>
       </div>

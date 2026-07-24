@@ -273,6 +273,28 @@ export async function generateSchedule(
   }
 
   await resolveKnockout(admin, t.id);
+
+  // Photo-bomb: give each player a fixed random partner (one random cycle).
+  const { data: photoPlayers } = await admin
+    .from("player")
+    .select("id")
+    .eq("tournament_id", t.id);
+  if (photoPlayers && photoPlayers.length >= 2) {
+    const ids = photoPlayers.map((p) => p.id);
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+    }
+    await Promise.all(
+      ids.map((id, i) =>
+        admin
+          .from("player")
+          .update({ photo_partner_id: ids[(i + 1) % ids.length] })
+          .eq("id", id),
+      ),
+    );
+  }
+
   redirect("/schedule");
 }
 
@@ -294,6 +316,7 @@ export async function saveEvent(
     venue_address: String(fd.get("venueAddress") ?? "").trim() || null,
     venue_phone: String(fd.get("venuePhone") ?? "").trim() || null,
     details: String(fd.get("details") ?? "").trim() || null,
+    photo_album_url: String(fd.get("photoAlbumUrl") ?? "").trim() || null,
     updated_at: new Date().toISOString(),
   });
   if (error) return { error: `Could not save: ${error.message}` };
