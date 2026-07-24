@@ -55,7 +55,7 @@ export default async function PhotoAdminPage() {
           <h1 className="font-display text-xl font-semibold">📸 Photo Bomb</h1>
         </div>
 
-        <p className="mt-4 text-sm text-foreground/60">
+        <p className="mt-4 text-sm text-foreground/80">
           Invite these emails to your Apple Shared Album as contributors, so
           everyone can add their photos.
           {ev?.photo_album_url && (
@@ -94,7 +94,13 @@ export default async function PhotoAdminPage() {
               >
                 <span className="min-w-0">
                   <span className="font-medium">{p.display_name}</span>
-                  <span className="block truncate text-xs text-foreground/50">
+                  <span
+                    className={
+                      p.photo_email
+                        ? "block truncate text-xs font-medium text-brand-dark"
+                        : "block truncate text-xs italic text-foreground/40"
+                    }
+                  >
                     {p.photo_email ?? "no email yet"}
                   </span>
                 </span>

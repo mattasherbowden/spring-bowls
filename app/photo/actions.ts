@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -53,5 +54,5 @@ export async function savePhotoEmail(fd: FormData): Promise<void> {
     .update({ photo_email: email || null })
     .eq("tournament_id", tournament.id)
     .eq("profile_id", user.id);
-  revalidatePath("/photo");
+  redirect("/photo");
 }

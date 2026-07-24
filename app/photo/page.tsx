@@ -1,10 +1,18 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { HomeButton } from "../_components/home-button";
 import { togglePhotoDone, savePhotoEmail } from "./actions";
 
-export default async function PhotoPage() {
+export default async function PhotoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ edit?: string }>;
+}) {
+  const { edit } = await searchParams;
+  const editing = edit === "1";
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -83,32 +91,43 @@ export default async function PhotoPage() {
             <li>Once you&apos;re in, add your photo (and enjoy everyone else&apos;s).</li>
           </ol>
 
-          {isPlayer && (
-            <form action={savePhotoEmail} className="mt-4">
-              <label className="block">
-                <span className="text-sm font-medium">Your email</span>
-                <input
-                  name="email"
-                  type="email"
-                  defaultValue={email ?? ""}
-                  placeholder="you@example.com"
-                  required
-                  className={inputCls}
-                />
-              </label>
-              <button
-                type="submit"
-                className="mt-2 w-full rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand-dark"
-              >
-                Save my email
-              </button>
-              {email && (
-                <p className="mt-2 text-sm text-brand-dark">
-                  ✓ Got it — Matt will send an album invite to {email}.
+          {isPlayer &&
+            (email && !editing ? (
+              <div className="mt-4 rounded-xl bg-brand/10 p-3 ring-1 ring-brand/20">
+                <p className="text-sm font-semibold text-brand-dark">
+                  ✓ Your email is saved
                 </p>
-              )}
-            </form>
-          )}
+                <p className="mt-0.5 text-sm text-foreground/70">
+                  Matt will send an album invite to {email}.
+                </p>
+                <Link
+                  href="/photo?edit=1"
+                  className="mt-1 inline-block text-xs font-medium text-brand hover:text-brand-dark"
+                >
+                  Change email
+                </Link>
+              </div>
+            ) : (
+              <form action={savePhotoEmail} className="mt-4">
+                <label className="block">
+                  <span className="text-sm font-medium">Your email</span>
+                  <input
+                    name="email"
+                    type="email"
+                    defaultValue={email ?? ""}
+                    placeholder="you@example.com"
+                    required
+                    className={inputCls}
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="mt-2 w-full rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand-dark"
+                >
+                  Save my email
+                </button>
+              </form>
+            ))}
         </section>
 
         {isPlayer && (
