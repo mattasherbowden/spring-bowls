@@ -168,11 +168,11 @@ function Shell({
     <main className="flex flex-1 flex-col items-center px-5 py-10">
       <div className="w-full max-w-md">
         <header className="text-center">
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-brand">
-            7th edition
-          </p>
-          <h1 className="mt-2 font-display text-5xl font-semibold tracking-tight">
+          <h1 className="font-display text-5xl font-semibold tracking-tight">
             Spring <span className="text-pink">Bowls</span>
+            <span className="align-super text-[0.4em] font-bold text-brand">
+              &rsquo;26
+            </span>
           </h1>
           <div className="mt-4 flex justify-center">
             <span className="rounded-full bg-white px-3 py-1 text-sm font-medium shadow-sm ring-1 ring-black/5">

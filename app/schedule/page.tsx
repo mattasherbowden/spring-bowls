@@ -183,10 +183,7 @@ export default async function SchedulePage() {
           <div className="flex">
             <HomeButton />
           </div>
-          <p className="mt-3 text-sm font-medium uppercase tracking-[0.2em] text-brand">
-            {tournament.name}
-          </p>
-          <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight">
+          <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight">
             <SBMark className="mr-2" />Schedule
           </h1>
         </header>
