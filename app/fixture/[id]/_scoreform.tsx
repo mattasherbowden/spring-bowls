@@ -120,15 +120,18 @@ export function UnlockButton({ fixtureId }: { fixtureId: string }) {
     {} as ScoreState,
   );
   return (
-    <form action={action} className="mt-4 text-center">
+    <form action={action} className="mt-5 text-center">
       <input type="hidden" name="fixtureId" value={fixtureId} />
       <button
         type="submit"
         disabled={pending}
-        className="text-xs font-medium text-red-700 hover:text-red-800 disabled:opacity-60"
+        className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
       >
-        {pending ? "Unlocking…" : "Unlock & re-enter (admin)"}
+        {pending ? "Resetting…" : "Reset score (admin) — clear it to re-enter"}
       </button>
+      <p className="mt-1 text-xs text-foreground/50">
+        Sets this game back to un-played so a player can enter it again.
+      </p>
       {state.error && (
         <p className="mt-1 text-xs text-red-800">{state.error}</p>
       )}
