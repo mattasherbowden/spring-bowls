@@ -575,7 +575,7 @@ async function PlayerHome({
               return (
                 <div
                   key={f.id}
-                  className="rounded-2xl border border-dashed border-foreground/20 bg-white/40 p-4 text-foreground/60"
+                  className="rounded-2xl border border-dashed border-coming-line bg-coming p-4 text-coming-ink"
                 >
                   <span className="text-xs font-medium uppercase tracking-wide text-foreground/50">
                     {f.stage === "knockout" ? "Knockout" : "Group game"}
@@ -599,7 +599,7 @@ async function PlayerHome({
                 <Link
                   key={f.id}
                   href={`/fixture/${f.id}`}
-                  className="block rounded-2xl bg-black/[.04] p-4 text-foreground/70 ring-1 ring-black/5 hover:bg-black/[.06]"
+                  className="block rounded-2xl bg-result p-4 text-foreground/70 ring-1 ring-black/5 hover:bg-result-hover"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium uppercase tracking-wide text-foreground/50">
