@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { HomeButton } from "../_components/home-button";
 import { createClient } from "@/lib/supabase/server";
 import { computeStandings } from "@/lib/domain/standings";
 import { buildBracket } from "@/lib/domain/bracket";
@@ -178,13 +179,10 @@ export default async function SchedulePage() {
     <main className="flex flex-1 flex-col items-center px-5 py-10">
       <div className="w-full max-w-lg">
         <header className="text-center">
-          <Link
-            href="/"
-            className="text-sm text-foreground/50 hover:text-foreground/80"
-          >
-            ← home
-          </Link>
-          <p className="mt-2 text-sm font-medium uppercase tracking-[0.2em] text-brand">
+          <div className="flex">
+            <HomeButton />
+          </div>
+          <p className="mt-3 text-sm font-medium uppercase tracking-[0.2em] text-brand">
             {tournament.name}
           </p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight">Schedule</h1>

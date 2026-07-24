@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HomeButton } from "../../_components/home-button";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -79,16 +80,11 @@ export default async function ScoredPage({
           </div>
         )}
 
-        <div className="mt-6 flex justify-center gap-2">
-          <Link
-            href="/"
-            className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium hover:bg-black/[.03]"
-          >
-            Home
-          </Link>
+        <div className="mt-6 flex items-center justify-center gap-2">
+          <HomeButton />
           <Link
             href="/schedule"
-            className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium hover:bg-black/[.03]"
+            className="rounded-full border border-black/10 px-5 py-2.5 text-sm font-medium hover:bg-black/[.03]"
           >
             See the schedule
           </Link>

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { HomeButton } from "../../_components/home-button";
 import { createClient } from "@/lib/supabase/server";
 import { ScoreForm, UnlockButton } from "./_scoreform";
 import { walkoverFixture } from "../actions";
@@ -81,13 +82,16 @@ export default async function FixturePage({
     <main className="flex flex-1 flex-col items-center px-5 py-10">
       <div className="w-full max-w-md">
         <header className="text-center">
-          <Link
-            href="/schedule"
-            className="text-sm text-foreground/50 hover:text-foreground/80"
-          >
-            ← schedule
-          </Link>
-          <p className="mt-2 text-xs font-medium uppercase tracking-wide text-foreground/50">
+          <div className="flex items-center justify-between">
+            <HomeButton />
+            <Link
+              href="/schedule"
+              className="text-sm font-medium text-brand hover:text-brand-dark"
+            >
+              Schedule →
+            </Link>
+          </div>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-foreground/50">
             {fixture.stage === "knockout"
               ? koLabel(fixture.match_code)
               : `Group ${fixture.group_label} · Round ${fixture.round}`}{" "}

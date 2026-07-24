@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HomeButton } from "../../_components/home-button";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -81,14 +82,17 @@ export default async function ResultsPage() {
   return (
     <main className="flex flex-1 flex-col items-center px-5 py-10">
       <div className="w-full max-w-md">
-        <header className="text-center">
-          <Link
-            href="/awards"
-            className="text-sm text-foreground/50 hover:text-foreground/80"
-          >
-            ← voting
-          </Link>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">
+        <header>
+          <div className="flex items-center justify-between">
+            <HomeButton />
+            <Link
+              href="/awards"
+              className="text-sm font-medium text-brand hover:text-brand-dark"
+            >
+              Voting →
+            </Link>
+          </div>
+          <h1 className="mt-3 text-center font-display text-2xl font-semibold tracking-tight">
             📊 Live results
           </h1>
           <p className="mt-1 text-sm text-foreground/60">

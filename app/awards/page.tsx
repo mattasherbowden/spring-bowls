@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AWARDS, type AwardDef } from "@/lib/domain/awards";
 import { AwardCard } from "./_card";
 import { setVotingStatus } from "./actions";
+import { HomeButton } from "../_components/home-button";
 
 type PlayerRow = {
   id: string;
@@ -23,16 +24,13 @@ function Frame({ children }: { children: React.ReactNode }) {
   return (
     <main className="flex flex-1 flex-col items-center px-5 py-10">
       <div className="w-full max-w-md">
-        <header className="text-center">
-          <Link
-            href="/"
-            className="text-sm text-foreground/50 hover:text-foreground/80"
-          >
-            ← home
-          </Link>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">
-            🏆 Awards
-          </h1>
+        <header>
+          <div className="flex items-center justify-between">
+            <HomeButton />
+            <h1 className="font-display text-2xl font-semibold tracking-tight">
+              🏆 Awards
+            </h1>
+          </div>
         </header>
         {children}
       </div>

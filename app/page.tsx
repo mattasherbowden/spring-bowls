@@ -265,7 +265,6 @@ export default async function Home() {
           advance={tournament.advance}
           teamId={teamId}
           firstName={firstName}
-          event={ev}
         />
         <LogoutButton />
       </Shell>
@@ -391,13 +390,11 @@ async function PlayerHome({
   advance,
   teamId,
   firstName,
-  event,
 }: {
   tournamentId: string;
   advance: number;
   teamId: string;
   firstName: string;
-  event: EventInfoData | null;
 }) {
   const supabase = await createClient();
 
@@ -525,16 +522,20 @@ async function PlayerHome({
         </p>
       </section>
 
-      <div className="mt-4 flex flex-col gap-2">
+      <div className="mt-4 flex gap-2">
         <Link
           href="/awards"
-          className="rounded-xl bg-brand px-4 py-3 text-center text-sm font-semibold text-white hover:bg-brand-dark"
+          className="flex-1 rounded-xl px-4 py-3 text-center text-sm font-bold text-white transition hover:brightness-105"
+          style={{
+            background: "linear-gradient(135deg, #ff7ab3, #e0479a)",
+            boxShadow: "0 6px 16px -4px rgba(224,71,154,0.45)",
+          }}
         >
           Vote for awards
         </Link>
         <Link
           href="/schedule"
-          className="rounded-xl border border-black/10 px-4 py-2.5 text-center text-sm font-medium hover:bg-black/[.03]"
+          className="flex-1 rounded-xl border border-black/10 bg-white px-4 py-3 text-center text-sm font-medium hover:bg-black/[.03]"
         >
           See the draw
         </Link>
@@ -701,7 +702,12 @@ async function PlayerHome({
         </table>
       </section>
 
-      {event && <EventInfo ev={event} />}
+      <Link
+        href="/day"
+        className="mt-4 block rounded-xl border border-black/10 bg-white px-4 py-3 text-center text-sm font-medium hover:bg-black/[.03]"
+      >
+        Day plan — schedule, dress code &amp; venue
+      </Link>
     </>
   );
 }
