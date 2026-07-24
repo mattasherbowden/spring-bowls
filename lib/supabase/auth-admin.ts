@@ -1,9 +1,13 @@
 import "server-only";
 
-// Create/delete auth users by calling the GoTrue admin REST endpoint directly.
-// We avoid supabase-js `auth.admin.createUser` because that path rejects the new
-// `sb_secret_` key against this project's ES256 JWT signing keys, whereas the
-// REST endpoint accepts it (verified against the live project).
+// Create/delete/update auth users by calling the GoTrue admin REST endpoint
+// directly. We avoid supabase-js `auth.admin.createUser` because that path
+// rejects the new `sb_secret_` key against this project's ES256 JWT signing
+// keys, whereas the REST endpoint accepts it.
+//
+// GoTrue also *intermittently* returns "invalid JWT ... unrecognized JWT kid
+// <nil> for algorithm ES256" — a transient signing-key hiccup that succeeds on
+// a retry — so every admin call retries with backoff before giving up.
 
 // Trim defensively: a trailing newline/space pasted into a Vercel env var is a
 // classic silent break (the key then fails to authenticate).
@@ -26,43 +30,78 @@ function keyShape(): string {
   return raw ? `${raw.trim().slice(0, 10)}… len ${raw.length}${ws}` : "MISSING";
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Errors worth retrying: the ES256/JWT signing hiccup, plus any 5xx / network
+// blip. A real error (e.g. duplicate email, 4xx) fails fast without retrying.
+const TRANSIENT = /jwt|signature|unverifiable|unrecognized|kid|temporar|timeout|network|fetch failed/i;
+const BACKOFF_MS = [400, 900, 1600]; // waits before attempts 2, 3, 4
+
+type AdminResult = {
+  ok: boolean;
+  body: { id?: string } | null;
+  status: number;
+  msg: string;
+};
+
+async function adminFetch(
+  path: string,
+  method: string,
+  payload?: unknown,
+): Promise<AdminResult> {
+  let lastMsg = "unknown error";
+  let lastStatus = 0;
+  for (let attempt = 0; attempt <= BACKOFF_MS.length; attempt++) {
+    if (attempt > 0) await sleep(BACKOFF_MS[attempt - 1]);
+    let res: Response;
+    try {
+      res = await fetch(`${SUPABASE_URL}${path}`, {
+        method,
+        headers: adminHeaders(),
+        body: payload ? JSON.stringify(payload) : undefined,
+      });
+    } catch (e) {
+      lastMsg = e instanceof Error ? e.message : "network error";
+      continue; // network errors are transient
+    }
+    const body = await res.json().catch(() => null);
+    if (res.ok) return { ok: true, body, status: res.status, msg: "" };
+    lastStatus = res.status;
+    lastMsg = String(
+      body?.msg ??
+        body?.error_description ??
+        body?.message ??
+        body?.error ??
+        `HTTP ${res.status}`,
+    );
+    if (!(res.status >= 500 || TRANSIENT.test(lastMsg))) {
+      return { ok: false, body, status: res.status, msg: lastMsg };
+    }
+  }
+  return { ok: false, body: null, status: lastStatus, msg: lastMsg };
+}
+
 export async function createAuthUser(
   email: string,
   password: string,
 ): Promise<{ id: string } | { error: string }> {
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
-    method: "POST",
-    headers: adminHeaders(),
-    body: JSON.stringify({ email, password, email_confirm: true }),
+  const r = await adminFetch("/auth/v1/admin/users", "POST", {
+    email,
+    password,
+    email_confirm: true,
   });
-  const body = await res.json().catch(() => null);
-  if (!res.ok || !body?.id) {
-    const msg =
-      body?.msg ??
-      body?.error_description ??
-      body?.message ??
-      body?.error ??
-      `HTTP ${res.status}`;
-    return { error: `${String(msg)} [key ${keyShape()}]` };
-  }
-  return { id: body.id as string };
+  if (r.ok && r.body?.id) return { id: r.body.id };
+  return { error: `${r.msg || "could not create login"} [key ${keyShape()}]` };
 }
 
 export async function deleteAuthUser(id: string): Promise<void> {
-  await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${id}`, {
-    method: "DELETE",
-    headers: adminHeaders(),
-  });
+  await adminFetch(`/auth/v1/admin/users/${id}`, "DELETE");
 }
 
 export async function setAuthUserPassword(
   id: string,
   password: string,
 ): Promise<boolean> {
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${id}`, {
-    method: "PUT",
-    headers: adminHeaders(),
-    body: JSON.stringify({ password }),
-  });
-  return res.ok;
+  const r = await adminFetch(`/auth/v1/admin/users/${id}`, "PUT", { password });
+  return r.ok;
 }
