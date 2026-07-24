@@ -180,7 +180,10 @@ export default async function AwardsPage() {
   const ko = koData ?? [];
   const maxRound = ko.reduce((m, f) => Math.max(m, f.round ?? 0), 0);
   const finalFx = ko.find(
-    (f) => f.round === maxRound && f.status === "completed" && f.winner_team_id,
+    (f) =>
+      f.round === maxRound &&
+      (f.status === "completed" || f.status === "walkover") &&
+      f.winner_team_id,
   );
   const champion = finalFx?.winner_team_id
     ? teamLabelById(finalFx.winner_team_id)

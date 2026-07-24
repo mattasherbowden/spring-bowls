@@ -97,7 +97,16 @@ export async function castVote(
       target_type: award.kind,
       target_id: targetId,
     });
-    if (error) return { error: "Could not save your vote — please try again." };
+    // 23505 = duplicate target from a racing identical tap; the vote is already
+    // recorded, so treat it as success. The DB trigger enforces the 2-vote cap.
+    if (error && error.code !== "23505") {
+      if (error.message?.includes("vote_limit_reached")) {
+        return {
+          error: `You've used both votes for ${award.title} — tap one of your picks to change it.`,
+        };
+      }
+      return { error: "Could not save your vote — please try again." };
+    }
   }
 
   revalidatePath("/awards");
