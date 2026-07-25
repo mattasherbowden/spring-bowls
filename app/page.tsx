@@ -89,6 +89,24 @@ function randomGreeting(): string {
   return GREETINGS[Math.floor(Math.random() * GREETINGS.length)];
 }
 
+// Shown on the "Up next" tile. WAITING = the game ahead of you on your rink is
+// still on, so relax. LIVE = your rink is clear, get out there.
+const WAITING_LINES = [
+  "Grab a beer — the game before you is still on 🍺",
+  "No rush — the rink's still busy. Time for a cheeky pint 🍺",
+  "Chill for a bit — there's a game ahead of you still playing 🍺",
+  "Sit tight and sip something — you're not up just yet 🍺",
+];
+const LIVE_LINES = [
+  "You're up — get on the green! 🟢",
+  "Your game is live — get out there! 🎳",
+  "Rink's clear — you're on! 🟢",
+  "Go go go — your rink is ready! 🎳",
+];
+function pick(arr: string[]): string {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 function EventInfo({ ev }: { ev: EventInfoData }) {
   const hasVenue = ev.venue_name || ev.venue_address || ev.venue_phone;
   const mapQuery = encodeURIComponent(
@@ -597,10 +615,30 @@ async function PlayerHome({
         (() => {
           const v = view(upNext);
           const ready = !!v.oppId;
+          // Which state is the tile in? waiting = a game ahead of you on your
+          // rink is still on; live = your rink is clear so you're up; tbd =
+          // opponent not decided; unknown = ready but no rink assigned yet.
+          const status: "tbd" | "waiting" | "live" | "unknown" = !ready
+            ? "tbd"
+            : aheadGame
+              ? "waiting"
+              : upNext.rink != null
+                ? "live"
+                : "unknown";
+          const tileClass =
+            status === "live"
+              ? "rounded-2xl bg-brand/15 p-5 ring-2 ring-brand/50"
+              : status === "waiting"
+                ? "rounded-2xl bg-amber-50 p-5 ring-1 ring-amber-200"
+                : "rounded-2xl bg-brand/10 p-5 ring-1 ring-brand/30";
           const inner = (
-            <div className="rounded-2xl bg-brand/10 p-5 ring-1 ring-brand/30">
+            <div className={tileClass}>
               <div className="flex items-start justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wide text-brand-dark">
+                <span
+                  className={`text-xs font-semibold uppercase tracking-wide ${
+                    status === "waiting" ? "text-amber-800" : "text-brand-dark"
+                  }`}
+                >
                   {upNext.stage === "knockout" ? "Knockout · next" : "Up next"}
                 </span>
                 {upNext.rink && (
@@ -608,7 +646,13 @@ async function PlayerHome({
                     <div className="text-[10px] font-semibold uppercase tracking-wide text-foreground/40">
                       Where
                     </div>
-                    <div className="mt-0.5 font-display text-lg font-semibold text-brand-dark">
+                    <div
+                      className={`mt-0.5 font-display text-lg font-semibold ${
+                        status === "waiting"
+                          ? "text-amber-900"
+                          : "text-brand-dark"
+                      }`}
+                    >
                       Rink {upNext.rink}
                     </div>
                   </div>
@@ -623,29 +667,51 @@ async function PlayerHome({
                   Group {groupLabel}
                 </p>
               )}
-              {ready && aheadGame && (
-                <p className="mt-2 rounded-lg bg-white/70 px-3 py-2 text-sm text-foreground/70">
-                  ⏱ You&apos;re on after{" "}
-                  <span className="font-medium text-foreground">
-                    {nameOf(aheadGame.team_a_id)} v {nameOf(aheadGame.team_b_id)}
-                  </span>
-                  {aheadCount > 1 && (
-                    <span className="text-foreground/50">
-                      {" · "}
-                      {aheadCount} games ahead on Rink {upNext.rink}
+
+              {status === "live" && (
+                <div className="mt-3 rounded-xl bg-brand px-4 py-3 text-center shadow-sm">
+                  <p className="font-display text-lg font-bold text-white">
+                    {pick(LIVE_LINES)}
+                  </p>
+                  <p className="mt-0.5 text-sm font-medium text-white/90">
+                    Rink {upNext.rink} is clear — head over now
+                  </p>
+                </div>
+              )}
+
+              {status === "waiting" && aheadGame && (
+                <div className="mt-3 rounded-xl bg-amber-100 px-4 py-3 text-center ring-1 ring-amber-200">
+                  <p className="font-display text-lg font-bold text-amber-900">
+                    {pick(WAITING_LINES)}
+                  </p>
+                  <p className="mt-1 text-sm text-amber-800">
+                    Rink {upNext.rink} is still on with{" "}
+                    <span className="font-semibold">
+                      {nameOf(aheadGame.team_a_id)} v{" "}
+                      {nameOf(aheadGame.team_b_id)}
                     </span>
-                  )}
-                </p>
+                    {aheadCount > 1 && (
+                      <span className="text-amber-700">
+                        {" · "}
+                        {aheadCount} games ahead of you
+                      </span>
+                    )}
+                  </p>
+                </div>
               )}
-              {ready && !aheadGame && (
+
+              {status === "unknown" && (
                 <p className="mt-2 text-sm font-medium text-brand-dark">
-                  ✅ Rink {upNext.rink} is clear — you&apos;re up now!
+                  You&apos;re up next — head over when you&apos;re called.
                 </p>
               )}
+
               {ready ? (
                 <>
                   <p className="mt-3 text-base font-bold text-brand-dark">
-                    Tap to enter the score →
+                    {status === "waiting"
+                      ? "Tap here to enter the score once you've played →"
+                      : "Tap to enter the score →"}
                   </p>
                   <p className="mt-0.5 text-xs text-foreground/60">
                     Either team can enter it once you&apos;ve played — first one
