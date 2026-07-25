@@ -35,6 +35,8 @@ the roster is still in setup, explicit organiser resolution for exact
 qualification ties (affected knockout slots wait instead of silently using UUID
 order), honest connection-failure screens, and a genuinely one-time,
 database-rate-limited owner recovery code. These are migrations `0021`–`0023`.
+Migration `0024` then made **Add team** database-idempotent, so a double tap or
+retry cannot create two teams or two sets of logins.
 
 ---
 

@@ -109,6 +109,80 @@ async function uniqueUsername(
   return `${base}${Math.floor(Math.random() * 100000)}`.slice(0, 32);
 }
 
+const SUBMISSION_KEY =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+async function completedTeamSubmission(
+  admin: SupabaseClient,
+  tournamentId: string,
+  submitKey: string,
+  teamSize: number,
+): Promise<AddTeamState["created"] | null> {
+  // A simultaneous retry can see the reserved team before the first request
+  // has finished creating its Auth users. Wait briefly for that request, then
+  // reconstruct the same one-time credentials from the deliberately retained
+  // event-login fields.
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const { data: team } = await admin
+      .from("team")
+      .select("id, name")
+      .eq("tournament_id", tournamentId)
+      .eq("submit_key", submitKey)
+      .maybeSingle();
+    if (!team) return null;
+
+    const { data: existingPlayers } = await admin
+      .from("player")
+      .select("display_name, profile_id")
+      .eq("tournament_id", tournamentId)
+      .eq("team_id", team.id);
+    if (existingPlayers?.length === teamSize) {
+      const profileIds = existingPlayers.map((player) => player.profile_id);
+      const { data: profiles } = await admin
+        .from("profile")
+        .select("id, username, login_password, is_owner")
+        .in("id", profileIds);
+      if (profiles?.length === teamSize) {
+        const byId = new Map(profiles.map((profile) => [profile.id, profile]));
+        const players: CreatedPlayer[] = [];
+        let complete = true;
+        for (const player of existingPlayers) {
+          const profile = byId.get(player.profile_id);
+          if (!profile?.username) {
+            complete = false;
+            break;
+          }
+          if (profile.is_owner) {
+            players.push({
+              displayName: player.display_name,
+              username: "— your organiser login —",
+              password: "",
+            });
+          } else if (profile.login_password) {
+            players.push({
+              displayName: player.display_name,
+              username: profile.username,
+              password: profile.login_password,
+            });
+          } else {
+            complete = false;
+            break;
+          }
+        }
+        if (complete) {
+          return {
+            teamName:
+              team.name ?? players.map((player) => player.displayName).join(" & "),
+            players,
+          };
+        }
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  return null;
+}
+
 export async function addTeam(
   _prev: AddTeamState,
   fd: FormData,
@@ -128,6 +202,13 @@ export async function addTeam(
     return {
       error:
         "The draw is live, so the roster is locked. Do not add a team after fixtures exist.",
+    };
+  }
+
+  const submitKey = String(fd.get("submitKey") ?? "").trim();
+  if (!SUBMISSION_KEY.test(submitKey)) {
+    return {
+      error: "This roster form is stale. Refresh it before adding the team.",
     };
   }
 
@@ -169,9 +250,33 @@ export async function addTeam(
 
   const { data: team, error: teamErr } = await admin
     .from("team")
-    .insert({ tournament_id: tournament.id, name: teamName })
+    .insert({
+      tournament_id: tournament.id,
+      name: teamName,
+      submit_key: submitKey,
+    })
     .select("id")
     .single();
+  if (
+    teamErr?.code === "23505" &&
+    /team_submit_key_unique|submit_key/i.test(teamErr.message)
+  ) {
+    const existing = await completedTeamSubmission(
+      admin,
+      tournament.id,
+      submitKey,
+      teamSize,
+    );
+    if (existing) {
+      revalidatePath("/setup/teams");
+      revalidatePath("/setup/logins");
+      return { created: existing };
+    }
+    return {
+      error:
+        "That team is already being added. Wait a moment, then submit again if it does not appear.",
+    };
+  }
   if (teamErr || !team) return { error: "Could not create the team." };
 
   const createdUserIds: string[] = [];
@@ -244,6 +349,7 @@ export async function addTeam(
   }
 
   revalidatePath("/setup/teams");
+  revalidatePath("/setup/logins");
   return {
     created: {
       teamName: teamName ?? output.map((o) => o.displayName).join(" & "),

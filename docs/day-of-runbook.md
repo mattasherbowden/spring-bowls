@@ -15,10 +15,14 @@ day.
   unavoidable, make them before generating the draw; the roster locks as soon
   as the live fixtures are created. Before that point, use **Edit** beside a
   team to correct names/nationalities or remove and re-add a team safely.
+- A double tap or retry while adding a team now reuses the same submission key,
+  so it cannot create a duplicate team. If the first request is still finishing
+  its logins, wait a moment rather than changing the names and creating a
+  second copy.
 - Deploy the latest `main` and confirm the deployment includes migration
   `0018_day_of_hardening.sql`, `0019_atomic_draw.sql`, and
   `0020_exclude_admin_nominees.sql` through
-  `0023_owner_recovery_hardening.sql`.
+  `0024_team_submission_idempotency.sql`.
 - Open `/api/warm` on the production domain. It should return `{"ok":true}`.
 - In Supabase, confirm the project says **Active**. Free projects with too
   little database activity can pause after seven days; the app now makes a

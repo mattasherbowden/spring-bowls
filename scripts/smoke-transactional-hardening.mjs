@@ -77,6 +77,36 @@ try {
     [ownerId],
   );
   const tournamentId = tournament.rows[0].id;
+  const submitKey = "8be2538f-8cc4-4f0c-a8f0-0b2b1dca59b8";
+  await client.query(
+    `
+      insert into public.team (tournament_id, name, submit_key)
+      values ($1, 'Idempotency first', $2)
+    `,
+    [tournamentId, submitKey],
+  );
+  let duplicateRejected = false;
+  await client.query("savepoint duplicate_team_submission");
+  try {
+    await client.query(
+      `
+        insert into public.team (tournament_id, name, submit_key)
+        values ($1, 'Idempotency duplicate', $2)
+      `,
+      [tournamentId, submitKey],
+    );
+  } catch (error) {
+    duplicateRejected =
+      error?.code === "23505" &&
+      /team_submit_key_unique/.test(error?.constraint ?? "");
+    await client.query("rollback to savepoint duplicate_team_submission");
+  }
+  await client.query("release savepoint duplicate_team_submission");
+  check(
+    "setup team submission key rejects a double insert",
+    duplicateRejected,
+  );
+
   const team = await client.query(
     `
       insert into public.team (tournament_id, name)

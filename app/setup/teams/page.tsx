@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { TeamBuilder } from "./_builder";
 import { GenerateScheduleButton } from "./_generate";
@@ -67,6 +68,7 @@ export default async function TeamsPage() {
         <div className="mt-6">
           <TeamBuilder
             tournamentId={tournament.id}
+            submissionKey={randomUUID()}
             teamSize={tournament.team_size}
             plannedTeams={tournament.planned_teams}
             teams={teams ?? []}

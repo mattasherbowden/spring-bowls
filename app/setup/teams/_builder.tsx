@@ -28,12 +28,14 @@ function flag(nat: string | null): string {
 
 export function TeamBuilder({
   tournamentId,
+  submissionKey,
   teamSize,
   plannedTeams,
   teams,
   rosterLocked,
 }: {
   tournamentId: string;
+  submissionKey: string;
   teamSize: number;
   plannedTeams: number;
   teams: TeamRow[];
@@ -136,6 +138,7 @@ export function TeamBuilder({
           action={action}
           className="space-y-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5"
         >
+        <input type="hidden" name="submitKey" value={submissionKey} />
         <h2 className="text-lg font-semibold">Add a team</h2>
         <label className="block">
           <span className="text-sm font-medium">Team name (optional)</span>
