@@ -6,6 +6,10 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AWARDS, type AwardDef } from "@/lib/domain/awards";
+import {
+  throwIfAuthUnavailable,
+  throwIfSupabaseError,
+} from "@/lib/supabase/query-error";
 
 type PlayerRow = { id: string; display_name: string; nationality: string | null };
 type TeamRow = { id: string; name: string | null; players: { display_name: string }[] };
@@ -18,22 +22,24 @@ export default async function ResultsPage() {
   const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
+  throwIfAuthUnavailable(authError, "award results authentication");
   if (!user) redirect("/");
 
   const admin = createAdminClient();
-  const { data: tournament } = await admin
+  const { data: tournament, error: tournamentError } = await admin
     .from("tournament")
     .select("id, voting_status")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
+  throwIfSupabaseError(tournamentError, "award results tournament");
   if (!tournament) redirect("/awards");
 
   const status = tournament.voting_status as "pending" | "open" | "closed";
 
-  const [{ data: playersData }, { data: teamsData }, { data: allVotes }] =
-    await Promise.all([
+  const [playersResult, teamsResult, votesResult] = await Promise.all([
       admin
         .from("player")
         .select("id, display_name, nationality")
@@ -47,6 +53,12 @@ export default async function ResultsPage() {
         .select("award_key, target_id")
         .eq("tournament_id", tournament.id),
     ]);
+  throwIfSupabaseError(playersResult.error, "award result players");
+  throwIfSupabaseError(teamsResult.error, "award result teams");
+  throwIfSupabaseError(votesResult.error, "award result tally");
+  const playersData = playersResult.data;
+  const teamsData = teamsResult.data;
+  const allVotes = votesResult.data;
 
   const players = (playersData ?? []) as PlayerRow[];
   const teams = (teamsData ?? []) as TeamRow[];

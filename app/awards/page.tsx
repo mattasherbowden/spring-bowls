@@ -8,6 +8,10 @@ import { AwardCard } from "./_card";
 import { VotingStatusButton } from "./_status-button";
 import { HomeButton } from "../_components/home-button";
 import { SBMark } from "../_components/sb-mark";
+import {
+  throwIfAuthUnavailable,
+  throwIfSupabaseError,
+} from "@/lib/supabase/query-error";
 
 type PlayerRow = {
   id: string;
@@ -45,22 +49,26 @@ export default async function AwardsPage() {
   const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
+  throwIfAuthUnavailable(authError, "awards authentication");
   if (!user) redirect("/");
 
   const admin = createAdminClient();
-  const { data: tournament } = await admin
+  const { data: tournament, error: tournamentError } = await admin
     .from("tournament")
     .select("id, voting_status")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
+  throwIfSupabaseError(tournamentError, "awards tournament");
 
-  const { data: prof } = await admin
+  const { data: prof, error: profileError } = await admin
     .from("profile")
     .select("is_owner, is_admin")
     .eq("id", user.id)
     .maybeSingle();
+  throwIfSupabaseError(profileError, "awards profile");
   const canManage = !!prof?.is_owner || !!prof?.is_admin;
 
   if (!tournament) {
@@ -76,12 +84,12 @@ export default async function AwardsPage() {
   const status = tournament.voting_status as "pending" | "open" | "closed";
 
   const [
-    { data: playersData },
-    { data: teamsData },
-    { data: allVotes },
-    { data: myVotes },
-    { data: koData },
-    { data: organiserProfilesData },
+    playersResult,
+    teamsResult,
+    allVotesResult,
+    myVotesResult,
+    knockoutResult,
+    organiserProfilesResult,
   ] = await Promise.all([
     admin
       .from("player")
@@ -110,6 +118,18 @@ export default async function AwardsPage() {
       .select("id, is_owner, is_admin")
       .or("is_owner.eq.true,is_admin.eq.true"),
   ]);
+  throwIfSupabaseError(playersResult.error, "award players");
+  throwIfSupabaseError(teamsResult.error, "award teams");
+  throwIfSupabaseError(allVotesResult.error, "award tally");
+  throwIfSupabaseError(myVotesResult.error, "current ballot");
+  throwIfSupabaseError(knockoutResult.error, "award champion");
+  throwIfSupabaseError(organiserProfilesResult.error, "award organisers");
+  const playersData = playersResult.data;
+  const teamsData = teamsResult.data;
+  const allVotes = allVotesResult.data;
+  const myVotes = myVotesResult.data;
+  const koData = knockoutResult.data;
+  const organiserProfilesData = organiserProfilesResult.data;
 
   const players = (playersData ?? []) as PlayerRow[];
   const teams = (teamsData ?? []) as TeamRow[];

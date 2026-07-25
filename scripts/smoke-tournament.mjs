@@ -105,6 +105,30 @@ try {
     "the atomic draw function is installed and rejects a non-setup tournament",
     !!archivedDrawError?.message.includes("draw_already_live"),
   );
+  const { error: archivedRosterEditError } = await admin.rpc(
+    "update_setup_team",
+    {
+      p_tournament_id: tournamentId,
+      p_team_id: crypto.randomUUID(),
+      p_team_name: "No change",
+      p_players: [],
+    },
+  );
+  check(
+    "roster edits are installed and reject a non-setup tournament",
+    !!archivedRosterEditError?.message.includes("roster_locked"),
+  );
+  const { error: archivedRosterDeleteError } = await admin.rpc(
+    "delete_setup_team",
+    {
+      p_tournament_id: tournamentId,
+      p_team_id: crypto.randomUUID(),
+    },
+  );
+  check(
+    "roster removals are installed and reject a non-setup tournament",
+    !!archivedRosterDeleteError?.message.includes("roster_locked"),
+  );
 
   const { data: team, error: teamError } = await admin
     .from("team")
@@ -157,6 +181,20 @@ try {
     .select("id")
     .eq("tournament_id", tournamentId);
   check("a member can read their teams", (mTeams?.length ?? 0) === 1);
+  await admin.from("qualification_tiebreak").insert({
+    tournament_id: tournamentId,
+    group_label: "A",
+    ordered_team_ids: [team.id, crypto.randomUUID()],
+    decided_by: helper.id,
+  });
+  const { data: memberTiebreaks } = await memberClient
+    .from("qualification_tiebreak")
+    .select("group_label")
+    .eq("tournament_id", tournamentId);
+  check(
+    "a member can read an organiser-confirmed qualification tiebreak",
+    (memberTiebreaks?.length ?? 0) === 1,
+  );
 
   const outClient = await signedInClient(outsider.email, outsider.password);
   const { error: outsiderDrawError } = await outClient.rpc(
@@ -171,6 +209,26 @@ try {
     "a regular client cannot call the atomic draw function",
     !!outsiderDrawError,
   );
+  const { error: outsiderRosterEditError } = await outClient.rpc(
+    "update_setup_team",
+    {
+      p_tournament_id: tournamentId,
+      p_team_id: team.id,
+      p_team_name: "Hax",
+      p_players: [],
+    },
+  );
+  const { error: outsiderRosterDeleteError } = await outClient.rpc(
+    "delete_setup_team",
+    {
+      p_tournament_id: tournamentId,
+      p_team_id: team.id,
+    },
+  );
+  check(
+    "a regular client cannot call roster maintenance functions",
+    !!outsiderRosterEditError && !!outsiderRosterDeleteError,
+  );
   const { data: oT } = await outClient
     .from("tournament")
     .select("id")
@@ -181,6 +239,14 @@ try {
     .select("id")
     .eq("tournament_id", tournamentId);
   check("an outsider cannot read its players (RLS)", (oPlayers?.length ?? 0) === 0);
+  const { data: outsiderTiebreaks } = await outClient
+    .from("qualification_tiebreak")
+    .select("group_label")
+    .eq("tournament_id", tournamentId);
+  check(
+    "an outsider cannot read qualification tiebreaks (RLS)",
+    (outsiderTiebreaks?.length ?? 0) === 0,
+  );
 
   const helperClient = await signedInClient(helper.email, helper.password);
   const { data: hT } = await helperClient

@@ -3,6 +3,10 @@ import Link from "next/link";
 import { HomeButton } from "../../_components/home-button";
 import { createClient } from "@/lib/supabase/server";
 import { ScoreForm, UnlockButton, WalkoverButton } from "./_scoreform";
+import {
+  throwIfAuthUnavailable,
+  throwIfSupabaseError,
+} from "@/lib/supabase/query-error";
 
 type TeamRow = {
   id: string;
@@ -27,48 +31,55 @@ export default async function FixturePage({
   const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
+  throwIfAuthUnavailable(authError, "fixture authentication");
   if (!user) redirect("/");
 
-  const { data: fixture } = await supabase
+  const { data: fixture, error: fixtureError } = await supabase
     .from("fixture")
     .select(
       "id, tournament_id, stage, match_code, group_label, round, rink, team_a_id, team_b_id, status, shots_a, shots_b, winner_team_id, entered_by",
     )
     .eq("id", id)
     .maybeSingle();
+  throwIfSupabaseError(fixtureError, "fixture");
   if (!fixture) redirect("/schedule");
 
   const ids = [fixture.team_a_id, fixture.team_b_id].filter(
     (x): x is string => !!x,
   );
-  const { data: teamsData } = await supabase
+  const { data: teamsData, error: teamsError } = await supabase
     .from("team")
     .select("id, name, players:player(display_name)")
     .in("id", ids);
+  throwIfSupabaseError(teamsError, "fixture teams");
   const teams = (teamsData ?? []) as TeamRow[];
   const teamName = (tid: string | null): string => {
     const t = teams.find((x) => x.id === tid);
     return t ? (t.name ?? t.players.map((p) => p.display_name).join(" & ")) : "TBC";
   };
 
-  const { data: tournament } = await supabase
+  const { data: tournament, error: tournamentError } = await supabase
     .from("tournament")
     .select("ends_per_game")
     .eq("id", fixture.tournament_id)
     .maybeSingle();
+  throwIfSupabaseError(tournamentError, "fixture rules");
 
-  const { data: me } = await supabase
+  const { data: me, error: playerError } = await supabase
     .from("player")
     .select("team_id, role")
     .eq("tournament_id", fixture.tournament_id)
     .eq("profile_id", user.id)
     .maybeSingle();
-  const { data: prof } = await supabase
+  throwIfSupabaseError(playerError, "fixture player");
+  const { data: prof, error: profileError } = await supabase
     .from("profile")
     .select("is_owner, is_admin")
     .eq("id", user.id)
     .maybeSingle();
+  throwIfSupabaseError(profileError, "fixture profile");
 
   const isMember =
     !!me && (me.team_id === fixture.team_a_id || me.team_id === fixture.team_b_id);

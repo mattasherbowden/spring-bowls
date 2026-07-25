@@ -87,6 +87,11 @@ export type AddTeamState = {
   created?: { teamName: string; players: CreatedPlayer[] };
 };
 
+export type EditTeamState = {
+  error?: string;
+  done?: boolean;
+};
+
 async function uniqueUsername(
   admin: SupabaseClient,
   displayName: string,
@@ -245,6 +250,154 @@ export async function addTeam(
       players: output,
     },
   };
+}
+
+// ---------- edit/remove a team before the draw ----------
+
+type TeamEditPlayer = {
+  id: string;
+  displayName: string;
+  nationality: "brit" | "kiwi";
+};
+
+function parseTeamEditPlayers(value: FormDataEntryValue | null):
+  | { players: TeamEditPlayer[] }
+  | { error: string } {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(String(value ?? "[]"));
+  } catch {
+    return { error: "Could not read the player details." };
+  }
+  if (!Array.isArray(raw)) {
+    return { error: "Could not read the player details." };
+  }
+  const players: TeamEditPlayer[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") {
+      return { error: "Check every player name and nationality." };
+    }
+    const id = String((entry as { id?: unknown }).id ?? "");
+    const displayName = String(
+      (entry as { displayName?: unknown }).displayName ?? "",
+    ).trim();
+    const nationality = String(
+      (entry as { nationality?: unknown }).nationality ?? "",
+    );
+    if (!id || displayName.length < 1 || displayName.length > 60) {
+      return { error: "Every player needs a name of 1–60 characters." };
+    }
+    if (nationality !== "brit" && nationality !== "kiwi") {
+      return { error: "Choose Brit or Kiwi for every player." };
+    }
+    players.push({ id, displayName, nationality });
+  }
+  if (new Set(players.map((player) => player.id)).size !== players.length) {
+    return { error: "The same player appeared twice. Refresh and try again." };
+  }
+  return { players };
+}
+
+export async function updateTeam(
+  _prev: EditTeamState,
+  fd: FormData,
+): Promise<EditTeamState> {
+  const ownerId = await currentOwnerId();
+  if (!ownerId) return { error: "Only the owner can edit teams." };
+
+  const tournamentId = String(fd.get("tournamentId") ?? "");
+  const teamId = String(fd.get("teamId") ?? "");
+  const teamName = String(fd.get("teamName") ?? "").trim();
+  if (!tournamentId || !teamId) {
+    return { error: "This roster page is stale. Refresh and try again." };
+  }
+  if (teamName.length > 80) {
+    return { error: "Keep the team name to 80 characters or fewer." };
+  }
+  const parsed = parseTeamEditPlayers(fd.get("players"));
+  if ("error" in parsed) return parsed;
+
+  const admin = createAdminClient();
+  const { data: tournament, error: tournamentError } = await admin
+    .from("tournament")
+    .select("team_size, status")
+    .eq("id", tournamentId)
+    .maybeSingle();
+  if (tournamentError || !tournament) {
+    return { error: "Could not load the tournament. Refresh and try again." };
+  }
+  if (tournament.status !== "setup") {
+    return { error: "The draw is live, so the roster is locked." };
+  }
+  if (parsed.players.length !== tournament.team_size) {
+    return { error: `This team must contain ${tournament.team_size} players.` };
+  }
+
+  const { error } = await admin.rpc("update_setup_team", {
+    p_tournament_id: tournamentId,
+    p_team_id: teamId,
+    p_team_name: teamName,
+    p_players: parsed.players.map((player) => ({
+      id: player.id,
+      display_name: player.displayName,
+      nationality: player.nationality,
+    })),
+  });
+  if (error) {
+    if (/roster_locked/.test(error.message)) {
+      return { error: "The draw just went live, so this edit was not saved." };
+    }
+    return {
+      error: `Nothing was changed. Refresh and try again (${error.message}).`,
+    };
+  }
+  revalidatePath("/setup/teams");
+  revalidatePath("/setup/logins");
+  revalidatePath("/");
+  return { done: true };
+}
+
+export async function removeTeam(
+  _prev: EditTeamState,
+  fd: FormData,
+): Promise<EditTeamState> {
+  const ownerId = await currentOwnerId();
+  if (!ownerId) return { error: "Only the owner can remove teams." };
+
+  const tournamentId = String(fd.get("tournamentId") ?? "");
+  const teamId = String(fd.get("teamId") ?? "");
+  if (!tournamentId || !teamId) {
+    return { error: "This roster page is stale. Refresh and try again." };
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("delete_setup_team", {
+    p_tournament_id: tournamentId,
+    p_team_id: teamId,
+  });
+  if (error) {
+    if (/roster_locked/.test(error.message)) {
+      return { error: "The draw just went live, so the team was not removed." };
+    }
+    return {
+      error: `The team was not removed. Refresh and try again (${error.message}).`,
+    };
+  }
+
+  let failedLogins = 0;
+  for (const row of (data ?? []) as { profile_id: string }[]) {
+    if (!(await deleteAuthUser(row.profile_id))) failedLogins++;
+  }
+  revalidatePath("/setup/teams");
+  revalidatePath("/setup/logins");
+  revalidatePath("/");
+  if (failedLogins > 0) {
+    return {
+      done: true,
+      error: `The team was removed, but ${failedLogins} old login${failedLogins === 1 ? "" : "s"} could not be deleted. Do not reuse those usernames yet.`,
+    };
+  }
+  return { done: true };
 }
 
 // ---------- generate the schedule (auto-draw the groups and lock) ----------

@@ -4,14 +4,24 @@ import { HomeButton } from "../_components/home-button";
 import { LiveRefresh } from "../_components/live-refresh";
 import { SBMark } from "../_components/sb-mark";
 import { createClient } from "@/lib/supabase/server";
-import { computeStandings } from "@/lib/domain/standings";
+import {
+  applyQualificationOverride,
+  computeStandings,
+  qualificationTieAtCutoff,
+  type TeamStanding,
+} from "@/lib/domain/standings";
 import { buildBracket } from "@/lib/domain/bracket";
 import {
   auditGroupSchedule,
   auditKnockoutSchedule,
 } from "@/lib/domain/schedule-audit";
 import { RefreshKnockoutButton } from "./_refresh-button";
+import { QualificationTieResolver } from "./_tie-resolution";
 import type { Fixture } from "@/lib/domain/types";
+import {
+  throwIfAuthUnavailable,
+  throwIfSupabaseError,
+} from "@/lib/supabase/query-error";
 
 type PlayerLite = { display_name: string; nationality: string | null };
 type TeamRow = {
@@ -47,6 +57,10 @@ type KoRow = {
   shots_b: number | null;
   winner_team_id: string | null;
 };
+type TiebreakRow = {
+  group_label: string;
+  ordered_team_ids: string[];
+};
 
 function sourceLabel(s: string | null): string {
   if (!s) return "TBD";
@@ -77,32 +91,37 @@ export default async function SchedulePage() {
   const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
+  throwIfAuthUnavailable(authError, "schedule authentication");
   if (!user) redirect("/");
 
-  const { data: tournament } = await supabase
+  const { data: tournament, error: tournamentError } = await supabase
     .from("tournament")
     .select("id, name, advance, rink_count, ends_per_game, minutes_per_end")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
+  throwIfSupabaseError(tournamentError, "schedule tournament");
   if (!tournament) redirect("/");
 
-  const { data: prof } = await supabase
+  const { data: prof, error: profileError } = await supabase
     .from("profile")
     .select("is_owner, is_admin")
     .eq("id", user.id)
     .maybeSingle();
+  throwIfSupabaseError(profileError, "schedule profile");
   const isOwner = !!prof?.is_owner;
   const canManage = isOwner || !!prof?.is_admin;
 
-  const { data: teamsData } = await supabase
+  const { data: teamsData, error: teamsError } = await supabase
     .from("team")
     .select("id, name, group_label, players:player(display_name, nationality)")
     .eq("tournament_id", tournament.id);
+  throwIfSupabaseError(teamsError, "schedule teams");
   const teams = (teamsData ?? []) as TeamRow[];
 
-  const { data: fixturesData } = await supabase
+  const { data: fixturesData, error: fixturesError } = await supabase
     .from("fixture")
     .select(
       "id, stage, group_label, round, rink, order_index, team_a_id, team_b_id, status, shots_a, shots_b, winner_team_id",
@@ -111,9 +130,10 @@ export default async function SchedulePage() {
     .eq("stage", "group")
     .order("rink", { ascending: true })
     .order("order_index", { ascending: true });
+  throwIfSupabaseError(fixturesError, "group schedule");
   const fixtures = (fixturesData ?? []) as FixtureRow[];
 
-  const { data: koData } = await supabase
+  const { data: koData, error: knockoutError } = await supabase
     .from("fixture")
     .select(
       "id, match_code, round, team_a_source, team_b_source, team_a_id, team_b_id, status, shots_a, shots_b, winner_team_id",
@@ -122,7 +142,19 @@ export default async function SchedulePage() {
     .eq("stage", "knockout")
     .order("round", { ascending: true })
     .order("order_index", { ascending: true });
+  throwIfSupabaseError(knockoutError, "knockout schedule");
   const koFixtures = (koData ?? []) as KoRow[];
+  const { data: tiebreakData, error: tiebreakError } = await supabase
+    .from("qualification_tiebreak")
+    .select("group_label, ordered_team_ids")
+    .eq("tournament_id", tournament.id);
+  throwIfSupabaseError(tiebreakError, "qualification tiebreaks");
+  const tiebreakByGroup = new Map(
+    ((tiebreakData ?? []) as TiebreakRow[]).map((row) => [
+      row.group_label,
+      row.ordered_team_ids,
+    ]),
+  );
 
   const teamName = (id: string | null): string => {
     const t = teams.find((x) => x.id === id);
@@ -161,7 +193,7 @@ export default async function SchedulePage() {
       winnerTeam: fixture.winner_team_id,
     })),
   );
-  const drawIssues = [...scheduleAudit.issues, ...knockoutIssues];
+  const baseDrawIssues = [...scheduleAudit.issues, ...knockoutIssues];
 
   const completed: Fixture[] = fixtures
     .filter(
@@ -185,6 +217,51 @@ export default async function SchedulePage() {
   const groupLabels = [
     ...new Set(teams.map((t) => t.group_label).filter((l): l is string => !!l)),
   ].sort();
+  const groupTables = new Map<
+    string,
+    {
+      table: TeamStanding[];
+      terminalTie: TeamStanding[];
+      validOverride: boolean;
+      initialOrder: string[];
+    }
+  >();
+  const qualificationIssues: string[] = [];
+  for (const label of groupLabels) {
+    const groupTeamIds = teams
+      .filter((team) => team.group_label === label)
+      .map((team) => team.id);
+    const rawTable = computeStandings(groupTeamIds, completed);
+    const groupComplete = rawTable.every(
+      (standing) => standing.played === Math.max(0, groupTeamIds.length - 1),
+    );
+    const terminalTie = groupComplete
+      ? qualificationTieAtCutoff(rawTable, tournament.advance)
+      : [];
+    const override = tiebreakByGroup.get(label);
+    const overrideSet = new Set(override ?? []);
+    const validOverride =
+      terminalTie.length > 0 &&
+      override?.length === terminalTie.length &&
+      terminalTie.every((standing) => overrideSet.has(standing.teamId));
+    const table = validOverride
+      ? applyQualificationOverride(rawTable, override)
+      : rawTable;
+    if (terminalTie.length > 0 && !validOverride) {
+      qualificationIssues.push(
+        `Group ${label} has an exact tie across the qualification line. Confirm its order below before the knockout can continue.`,
+      );
+    }
+    groupTables.set(label, {
+      table,
+      terminalTie,
+      validOverride,
+      initialOrder: validOverride
+        ? (override as string[])
+        : terminalTie.map((standing) => standing.teamId),
+    });
+  }
+  const drawIssues = [...baseDrawIssues, ...qualificationIssues];
   const rinks = [
     ...new Set(fixtures.map((f) => f.rink).filter((r): r is number => r != null)),
   ].sort((a, b) => a - b);
@@ -299,10 +376,9 @@ export default async function SchedulePage() {
         ) : (
           <div className="mt-6 space-y-6">
             {groupLabels.map((label) => {
-              const groupTeamIds = teams
-                .filter((t) => t.group_label === label)
-                .map((t) => t.id);
-              const table = computeStandings(groupTeamIds, completed);
+              const group = groupTables.get(label);
+              const table = group?.table ?? [];
+              const terminalTie = group?.terminalTie ?? [];
               return (
                 <section
                   key={label}
@@ -329,7 +405,15 @@ export default async function SchedulePage() {
                         <tr
                           key={row.teamId}
                           className={
-                            row.rank <= tournament.advance ? "bg-brand/20" : ""
+                            terminalTie.length > 0 &&
+                            !group?.validOverride &&
+                            terminalTie.some(
+                              (tied) => tied.teamId === row.teamId,
+                            )
+                              ? "bg-amber-100"
+                              : row.rank <= tournament.advance
+                                ? "bg-brand/20"
+                                : ""
                           }
                         >
                           <td className="py-1">{teamName(row.teamId)}</td>
@@ -345,6 +429,25 @@ export default async function SchedulePage() {
                       ))}
                     </tbody>
                   </table>
+                  {terminalTie.length > 0 &&
+                    (canManage ? (
+                      <QualificationTieResolver
+                        tournamentId={tournament.id}
+                        groupLabel={label}
+                        teams={terminalTie.map((standing) => ({
+                          id: standing.teamId,
+                          label: teamName(standing.teamId),
+                        }))}
+                        initialOrder={group?.initialOrder ?? []}
+                        resolved={!!group?.validOverride}
+                      />
+                    ) : (
+                      <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 ring-1 ring-amber-200">
+                        This group has an exact qualification tie. The knockout is
+                        waiting for an organiser&apos;s bowl-off or drawn-lots
+                        decision.
+                      </p>
+                    ))}
                 </section>
               );
             })}

@@ -1,6 +1,10 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { computeStandings } from "@/lib/domain/standings";
+import {
+  applyQualificationOverride,
+  computeStandings,
+  qualificationTieAtCutoff,
+} from "@/lib/domain/standings";
 import { buildBracket } from "@/lib/domain/bracket";
 import type { Fixture } from "@/lib/domain/types";
 
@@ -16,7 +20,8 @@ export async function resolveKnockout(
     "id, match_code, team_a_source, team_b_source, team_a_id, team_b_id, status, winner_team_id";
 
   // These four reads are independent — fetch them together to cut round-trips.
-  const [tResult, teamsResult, groupFxResult, koResult] = await Promise.all([
+  const [tResult, teamsResult, groupFxResult, koResult, tiebreakResult] =
+    await Promise.all([
     admin
       .from("tournament")
       .select("advance, rink_count")
@@ -38,9 +43,17 @@ export async function resolveKnockout(
       .eq("stage", "knockout")
       .order("round", { ascending: true })
       .order("match_code", { ascending: true }),
+    admin
+      .from("qualification_tiebreak")
+      .select("group_label, ordered_team_ids")
+      .eq("tournament_id", tournamentId),
   ]);
   const readError =
-    tResult.error ?? teamsResult.error ?? groupFxResult.error ?? koResult.error;
+    tResult.error ??
+    teamsResult.error ??
+    groupFxResult.error ??
+    koResult.error ??
+    tiebreakResult.error;
   if (readError) {
     return { error: `Could not load the knockout data: ${readError.message}` };
   }
@@ -63,6 +76,12 @@ export async function resolveKnockout(
 
   const groupFixtures = groupFxResult.data ?? [];
   let knockout = koResult.data ?? [];
+  const tiebreakByGroup = new Map(
+    (tiebreakResult.data ?? []).map((row) => [
+      row.group_label,
+      row.ordered_team_ids as string[],
+    ]),
+  );
 
   // Create the bracket the first time.
   if (knockout.length === 0) {
@@ -111,6 +130,7 @@ export async function resolveKnockout(
 
   // Rankings for groups that are fully played.
   const groupRank = new Map<string, string[]>();
+  const unresolvedTies: string[] = [];
   for (const g of groupLabels) {
     const gFixtures = groupFixtures.filter((f) => f.group_label === g);
     const size = groupSize.get(g) ?? 0;
@@ -143,9 +163,24 @@ export async function resolveKnockout(
     const groupTeamIds = teams
       .filter((tm) => tm.group_label === g)
       .map((tm) => tm.id);
+    const standings = computeStandings(groupTeamIds, domain);
+    const terminalTie = qualificationTieAtCutoff(standings, advance);
+    const override = tiebreakByGroup.get(g);
+    const overrideIds = new Set(override ?? []);
+    const validOverride =
+      terminalTie.length > 0 &&
+      override?.length === terminalTie.length &&
+      terminalTie.every((row) => overrideIds.has(row.teamId));
+    if (terminalTie.length > 0 && !validOverride) {
+      unresolvedTies.push(g);
+      continue;
+    }
+    const resolvedStandings = validOverride
+      ? applyQualificationOverride(standings, override)
+      : standings;
     groupRank.set(
       g,
-      computeStandings(groupTeamIds, domain).map((r) => r.teamId),
+      resolvedStandings.map((standing) => standing.teamId),
     );
   }
 
@@ -224,6 +259,13 @@ export async function resolveKnockout(
   if (failures.length > 0) {
     return {
       error: `Could not fill ${failures.length} knockout slot${failures.length === 1 ? "" : "s"} — refresh the knockout and try again.`,
+    };
+  }
+  if (unresolvedTies.length > 0) {
+    return {
+      error: `Exact qualification tie in Group ${unresolvedTies.join(
+        ", ",
+      )}. An organiser must confirm the tie order on the schedule before those knockout places can be filled.`,
     };
   }
   return {};

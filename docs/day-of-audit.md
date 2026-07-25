@@ -30,6 +30,12 @@ scores were preserved while rink/order values were repacked. Migration
 `0019_atomic_draw.sql` also makes initial group assignment + fixture creation +
 the setup-to-live transition one all-or-nothing database transaction.
 
+A final pre-event repair pass added transactional edit/remove controls while
+the roster is still in setup, explicit organiser resolution for exact
+qualification ties (affected knockout slots wait instead of silently using UUID
+order), honest connection-failure screens, and a genuinely one-time,
+database-rate-limited owner recovery code. These are migrations `0021`–`0023`.
+
 ---
 
 ## P1 — Could break the event

@@ -15,7 +15,7 @@ export function RecoverForm() {
       <Field id="username" label="Username" type="text" username placeholder="e.g. matt" />
       <Field
         id="code"
-        label="Recovery code"
+        label="One-time recovery code"
         type="text"
         username
         placeholder="e.g. green-jack-4821"

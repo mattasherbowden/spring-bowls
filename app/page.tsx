@@ -8,8 +8,16 @@ import { logout } from "./actions";
 import { OrganiserLinks } from "./_components/organiser-links";
 import { LiveRefresh } from "./_components/live-refresh";
 import { upNextInfo } from "@/lib/domain/up-next";
-import { computeStandings } from "@/lib/domain/standings";
+import {
+  applyQualificationOverride,
+  computeStandings,
+  qualificationTieAtCutoff,
+} from "@/lib/domain/standings";
 import type { Fixture } from "@/lib/domain/types";
+import {
+  throwIfAuthUnavailable,
+  throwIfSupabaseError,
+} from "@/lib/supabase/query-error";
 
 type TeamLite = { id: string; name: string | null; players: { display_name: string }[] };
 type FixtureLite = {
@@ -228,20 +236,25 @@ export default async function Home() {
   const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
+  throwIfAuthUnavailable(authError, "home authentication");
 
-  const { data: evData } = await supabase
+  const { data: evData, error: eventError } = await supabase
     .from("event_settings")
     .select("event_at, venue_name, venue_address, venue_phone, details")
     .eq("id", 1)
     .maybeSingle();
+  throwIfSupabaseError(eventError, "event details");
   const ev = evData as EventInfoData | null;
   const dateLabel = ev?.event_at
     ? formatEventDate(ev.event_at)
     : "date to be confirmed";
 
   if (!user) {
-    const { data: setupDone } = await supabase.rpc("owner_exists");
+    const { data: setupDone, error: setupError } =
+      await supabase.rpc("owner_exists");
+    throwIfSupabaseError(setupError, "owner setup check");
     return (
       <Shell dateLabel={dateLabel} eventAt={ev?.event_at}>
         <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
@@ -271,26 +284,29 @@ export default async function Home() {
     );
   }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profile")
     .select("display_name, is_owner, is_admin")
     .eq("id", user.id)
     .single();
-  const { data: tournament } = await supabase
+  throwIfSupabaseError(profileError, "current profile");
+  const { data: tournament, error: tournamentError } = await supabase
     .from("tournament")
     .select("id, name, advance, status")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
+  throwIfSupabaseError(tournamentError, "active tournament");
 
   let teamId: string | null = null;
   if (tournament) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("player")
       .select("team_id")
       .eq("tournament_id", tournament.id)
       .eq("profile_id", user.id)
       .maybeSingle();
+    throwIfSupabaseError(error, "current player");
     teamId = data?.team_id ?? null;
   }
 
@@ -456,10 +472,11 @@ async function PlayerHome({
 }) {
   const supabase = await createClient();
 
-  const { data: allTeamsData } = await supabase
+  const { data: allTeamsData, error: allTeamsError } = await supabase
     .from("team")
     .select("id, name, group_label, players:player(display_name)")
     .eq("tournament_id", tournamentId);
+  throwIfSupabaseError(allTeamsError, "player home teams");
   const allTeams = (allTeamsData ?? []) as (TeamLite & {
     group_label: string | null;
   })[];
@@ -469,7 +486,7 @@ async function PlayerHome({
     ? allTeams.filter((t) => t.group_label === groupLabel)
     : [];
 
-  const { data: myFixturesData } = await supabase
+  const { data: myFixturesData, error: myFixturesError } = await supabase
     .from("fixture")
     .select(
       "id, stage, round, rink, order_index, team_a_id, team_b_id, status, shots_a, shots_b, winner_team_id",
@@ -477,20 +494,33 @@ async function PlayerHome({
     .eq("tournament_id", tournamentId)
     .or(`team_a_id.eq.${teamId},team_b_id.eq.${teamId}`)
     .order("order_index", { ascending: true });
+  throwIfSupabaseError(myFixturesError, "player fixtures");
   const myFixtures = (myFixturesData ?? []) as FixtureLite[];
 
-  const { data: groupFixturesData } = await supabase
+  const { data: groupFixturesData, error: groupFixturesError } = await supabase
     .from("fixture")
     .select("team_a_id, team_b_id, status, shots_a, shots_b")
     .eq("tournament_id", tournamentId)
     .eq("group_label", groupLabel ?? "__none__");
+  throwIfSupabaseError(groupFixturesError, "group standings");
+  const tiebreakResult = groupLabel
+    ? await supabase
+        .from("qualification_tiebreak")
+        .select("ordered_team_ids")
+        .eq("tournament_id", tournamentId)
+        .eq("group_label", groupLabel)
+        .maybeSingle()
+    : { data: null, error: null };
+  throwIfSupabaseError(tiebreakResult.error, "qualification tiebreak");
+  const tiebreakData = tiebreakResult.data;
 
   // Every game on the board — used to find the game directly ahead of yours on
   // your rink ("you're on after …").
-  const { data: allFixturesData } = await supabase
+  const { data: allFixturesData, error: allFixturesError } = await supabase
     .from("fixture")
     .select("id, rink, order_index, team_a_id, team_b_id, status")
     .eq("tournament_id", tournamentId);
+  throwIfSupabaseError(allFixturesError, "live fixture board");
   const allFixtures = (allFixturesData ?? []) as Array<{
     id: string;
     rink: number | null;
@@ -527,17 +557,35 @@ async function PlayerHome({
         ends: [{ shotsA: f.shots_a as number, shotsB: f.shots_b as number }],
       },
     }));
-  const table = computeStandings(
+  const rawTable = computeStandings(
     groupTeams.map((t) => t.id),
     completed,
   );
-  const myRank = table.find((r) => r.teamId === teamId)?.rank ?? null;
   const expectedGroupGames =
     (groupTeams.length * Math.max(0, groupTeams.length - 1)) / 2;
   const groupFinished =
     expectedGroupGames > 0 && completed.length >= expectedGroupGames;
+  const terminalTie = groupFinished
+    ? qualificationTieAtCutoff(rawTable, advance)
+    : [];
+  const override = (tiebreakData?.ordered_team_ids ?? null) as string[] | null;
+  const overrideSet = new Set(override ?? []);
+  const validOverride =
+    terminalTie.length > 0 &&
+    override?.length === terminalTie.length &&
+    terminalTie.every((standing) => overrideSet.has(standing.teamId));
+  const table = validOverride
+    ? applyQualificationOverride(rawTable, override)
+    : rawTable;
+  const unresolvedQualificationTie = terminalTie.length > 0 && !validOverride;
+  const myRank = unresolvedQualificationTie
+    ? null
+    : (table.find((r) => r.teamId === teamId)?.rank ?? null);
   const eliminated =
-    groupFinished && myRank != null && myRank > advance;
+    groupFinished &&
+    !unresolvedQualificationTie &&
+    myRank != null &&
+    myRank > advance;
 
   const isDone = (f: FixtureLite) =>
     f.status === "completed" || f.status === "walkover";
@@ -604,6 +652,12 @@ async function PlayerHome({
       <div className="mt-2">
         <LiveRefresh />
       </div>
+      {unresolvedQualificationTie && (
+        <p className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
+          Group {groupLabel} has an exact qualification tie. The knockout is
+          waiting while an organiser confirms the bowl-off or drawn-lots order.
+        </p>
+      )}
 
       {upNext ? (
         (() => {
@@ -833,7 +887,14 @@ async function PlayerHome({
             {table.map((row) => (
               <tr
                 key={row.teamId}
-                className={`${row.rank <= advance ? "bg-brand/20" : ""} ${
+                className={`${
+                  unresolvedQualificationTie &&
+                  terminalTie.some((tied) => tied.teamId === row.teamId)
+                    ? "bg-amber-100"
+                    : row.rank <= advance
+                      ? "bg-brand/20"
+                      : ""
+                } ${
                   row.teamId === teamId ? "font-semibold text-brand-dark" : ""
                 }`}
               >

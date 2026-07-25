@@ -23,7 +23,8 @@ export function RecoveryPanel({ hasCode }: { hasCode: boolean }) {
         <p className="mt-2 font-mono text-xl tracking-wide">{state.code}</p>
         <p className="mt-2 text-xs text-amber-800">
           Write it down or store it in your password manager. Keep it separate
-          from your password. It won&apos;t be shown again.
+          from your password. It won&apos;t be shown again and stops working after
+          one successful password reset.
         </p>
       </div>
     );

@@ -13,10 +13,12 @@ day.
   fixtures, scores, votes and player logins.
 - Prefer doing the final roster on Friday. If Saturday-morning changes are
   unavoidable, make them before generating the draw; the roster locks as soon
-  as the live fixtures are created.
+  as the live fixtures are created. Before that point, use **Edit** beside a
+  team to correct names/nationalities or remove and re-add a team safely.
 - Deploy the latest `main` and confirm the deployment includes migration
   `0018_day_of_hardening.sql`, `0019_atomic_draw.sql`, and
-  `0020_exclude_admin_nominees.sql`.
+  `0020_exclude_admin_nominees.sql` through
+  `0023_owner_recovery_hardening.sql`.
 - Open `/api/warm` on the production domain. It should return `{"ok":true}`.
 - In Supabase, confirm the project says **Active**. Free projects with too
   little database activity can pause after seven days; the app now makes a
@@ -36,7 +38,9 @@ day.
   their team.
 - On **Schedule**, confirm the organiser panel says **Draw checks passed**. It
   verifies every group pairing, time-wave/rink placement, team running order,
-  and the knockout dependency graph. Do not start if it is red.
+  and the knockout dependency graph. Do not start if it is red. If an exact
+  qualification tie occurs later, the affected knockout places wait until an
+  organiser records the bowl-off/drawn-lots order shown on that group.
 - Read the progress line and confirm every rehearsal score has been reset. A
   non-zero completed count means the live tables and qualification have already
   started.
@@ -57,6 +61,8 @@ day.
   small **refresh now** control forces an immediate update.
 - An amber offline message means the displayed scores may be stale. Do not save
   a score until the phone reconnects.
+- A **Connection hiccup** page means tournament data could not be loaded. It
+  never means the event was reset; wait a moment and use **Try again**.
 
 ## Entering and correcting scores
 
@@ -105,8 +111,9 @@ These are event-policy choices rather than safe assumptions for the software:
   its current score, or treated as a walkover. The app intentionally does not
   guess; there is no automatic abandoned-game points rule.
 - **Exact multi-team qualification tie:** the normal order is wins, shot
-  difference, shots for, then head-to-head for a clean two-team tie. Agree on a
-  bowl-off or drawn-lots rule for a still-exact three-way tie before it happens.
+  difference, shots for, then head-to-head for a clean two-team tie. For a
+  still-exact three-way tie, run a bowl-off or draw lots; the app pauses the
+  affected knockout places and asks an organiser to record the full order.
 - **No-show:** the implemented rule is a 10–0 walkover to the present team.
 - **Running order:** call **Wave 1, Wave 2, …** from the schedule. “Group Round”
   describes round-robin logic and is not always the physical start wave.
@@ -126,7 +133,7 @@ These are event-policy choices rather than safe assumptions for the software:
 - The generated draw is property-tested for 2–40 teams, group targets 3–5,
   top-one/top-two qualification, and 1–6 rinks. Bracket dependency properties
   are checked for every 2–16 qualifier field.
-- 313 unit/property tests passed.
+- 315 unit/property tests passed.
 - TypeScript, ESLint, and the production build passed.
 - Live Supabase smoke tests passed for player isolation, standalone helper
   access, fixture-write isolation, racing result locks, and voting closure.

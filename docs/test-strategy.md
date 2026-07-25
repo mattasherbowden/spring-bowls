@@ -2,6 +2,12 @@
 
 Tests are a first-class requirement here, not an afterthought. The point of this doc is not just "we test" — it's how we stop tests from **cheating** (looking green while proving nothing). Read §3 before writing a single test.
 
+**Current implementation:** the repository runs the Vitest domain/property
+suite plus the explicit live-Supabase smoke script. Component tests, Playwright,
+mutation testing, traceability generation and GitHub Actions described below
+are the target strategy; they are not yet configured and must not be reported
+as passing checks.
+
 ## 1. Principles
 
 1. **A test encodes a requirement, not the implementation.** Expected values come from the spec/maths done independently — never pasted from what the code happened to output.

@@ -95,8 +95,8 @@ function hashCode(code: string): string {
   return createHash("sha256").update(code.trim().toLowerCase()).digest("hex");
 }
 
-// Three words + four digits from a 30-word list ≈ 2.4e8 combinations; with the
-// throttle in recoverPassword, guessing it is impractical.
+// Three words + four digits from a 30-word list ≈ 2.4e8 combinations. Database
+// throttling in consume_owner_recovery limits online guessing.
 function makeRecoveryCode(): string {
   const word = () => RECOVERY_WORDS[randomInt(RECOVERY_WORDS.length)];
   return `${word()}-${word()}-${word()}-${randomInt(1000, 10000)}`;
@@ -150,17 +150,41 @@ export async function recoverPassword(
   }
 
   const admin = createAdminClient();
-  const { data: prof } = await admin
-    .from("profile")
-    .select("id, recovery_hash")
-    .eq("username_canonical", username.toLowerCase())
-    .maybeSingle();
-  if (!prof?.recovery_hash || prof.recovery_hash !== hashCode(code)) {
+  const codeHash = hashCode(code);
+  const { data, error } = await admin.rpc("consume_owner_recovery", {
+    p_username: username,
+    p_code_hash: codeHash,
+  });
+  if (error) {
+    return {
+      error: "Could not check the recovery code just then — please try again.",
+    };
+  }
+  const recovery = (data?.[0] ?? null) as {
+    status: "ok" | "invalid" | "rate_limited";
+    profile_id: string | null;
+  } | null;
+  if (recovery?.status === "rate_limited") {
+    return {
+      error:
+        "Too many recovery attempts. Wait 15 minutes before trying again.",
+    };
+  }
+  if (recovery?.status !== "ok" || !recovery.profile_id) {
     return { error: "That username and recovery code do not match." };
   }
 
-  const ok = await setAuthUserPassword(prof.id, newPassword);
-  if (!ok) return { error: "Could not reset the password — please try again." };
+  const ok = await setAuthUserPassword(recovery.profile_id, newPassword);
+  if (!ok) {
+    // The database consumed the one-time code first. Restore it only if no new
+    // code has been generated in the meantime.
+    await admin
+      .from("profile")
+      .update({ recovery_hash: codeHash })
+      .eq("id", recovery.profile_id)
+      .is("recovery_hash", null);
+    return { error: "Could not reset the password — please try again." };
+  }
   redirect("/");
 }
 

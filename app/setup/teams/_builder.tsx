@@ -1,13 +1,23 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { addTeam, type AddTeamState } from "../actions";
+import {
+  addTeam,
+  removeTeam,
+  updateTeam,
+  type AddTeamState,
+  type EditTeamState,
+} from "../actions";
 import { ErrorNote } from "../../_components/form-bits";
 
 type TeamRow = {
   id: string;
   name: string | null;
-  players: { display_name: string; nationality: string | null }[];
+  players: {
+    id: string;
+    display_name: string;
+    nationality: string | null;
+  }[];
 };
 
 function flag(nat: string | null): string {
@@ -17,11 +27,13 @@ function flag(nat: string | null): string {
 }
 
 export function TeamBuilder({
+  tournamentId,
   teamSize,
   plannedTeams,
   teams,
   rosterLocked,
 }: {
+  tournamentId: string;
   teamSize: number;
   plannedTeams: number;
   teams: TeamRow[];
@@ -46,32 +58,30 @@ export function TeamBuilder({
           </p>
         ) : (
           <ul className="mt-3 space-y-2">
-            {teams.map((t) => (
-              <li
-                key={t.id}
-                className="rounded-lg border border-black/5 bg-brand/5 px-3 py-2 text-sm"
-              >
-                <span className="font-medium">
-                  {t.name ?? t.players.map((p) => p.display_name).join(" & ")}
-                </span>
-                <span className="ml-2 text-foreground/60">
-                  {t.players
-                    .map((p) => `${p.display_name}${flag(p.nationality)}`)
-                    .join(", ")}
-                </span>
-              </li>
+            {teams.map((team) => (
+              <TeamListItem
+                key={team.id}
+                tournamentId={tournamentId}
+                team={team}
+                editable={!rosterLocked}
+              />
             ))}
           </ul>
         )}
-        {teams.length < plannedTeams ? (
+        {rosterLocked ? (
+          <p className="mt-3 text-xs font-medium text-brand-dark">
+            {teams.length} team{teams.length === 1 ? "" : "s"} in the live draw —
+            roster locked.
+          </p>
+        ) : teams.length < plannedTeams ? (
           <p className="mt-3 text-xs text-foreground/50">
             {plannedTeams - teams.length} more to go.
           </p>
         ) : (
           <p className="mt-3 text-xs font-medium text-brand-dark">
             {teams.length === plannedTeams
-              ? `All ${plannedTeams} teams added — you can still add or edit.`
-              : `${teams.length} teams added (${teams.length - plannedTeams} over the planned ${plannedTeams}) — you can still edit.`}
+              ? `All ${plannedTeams} teams added — ready to generate the draw.`
+              : `${teams.length} teams added (${teams.length - plannedTeams} over the planned ${plannedTeams}) — ready to generate the draw.`}
           </p>
         )}
       </div>
@@ -189,6 +199,181 @@ export function TeamBuilder({
         </div>
       )}
     </div>
+  );
+}
+
+function TeamListItem({
+  tournamentId,
+  team,
+  editable,
+}: {
+  tournamentId: string;
+  team: TeamRow;
+  editable: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [teamName, setTeamName] = useState(team.name ?? "");
+  const [players, setPlayers] = useState(() =>
+    team.players.map((player) => ({
+      id: player.id,
+      displayName: player.display_name,
+      nationality:
+        player.nationality === "kiwi" ? ("kiwi" as const) : ("brit" as const),
+    })),
+  );
+  const [editState, editAction, editPending] = useActionState(
+    updateTeam,
+    {} as EditTeamState,
+  );
+  const [removeState, removeAction, removePending] = useActionState(
+    removeTeam,
+    {} as EditTeamState,
+  );
+  const label = team.name ?? team.players.map((player) => player.display_name).join(" & ");
+
+  if (editing && editable) {
+    return (
+      <li className="rounded-xl border border-brand/20 bg-white p-3 text-sm">
+        <form action={editAction} className="space-y-3">
+          <input type="hidden" name="tournamentId" value={tournamentId} />
+          <input type="hidden" name="teamId" value={team.id} />
+          <input type="hidden" name="players" value={JSON.stringify(players)} />
+          <p className="text-xs text-foreground/60">
+            Correct the displayed names here; existing usernames and passwords
+            stay the same. Remove and re-add the team if you need new logins.
+          </p>
+          <label className="block">
+            <span className="text-xs font-medium">Team name (optional)</span>
+            <input
+              name="teamName"
+              value={teamName}
+              onChange={(event) => setTeamName(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-black/10 px-3 py-2 text-base text-black outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+            />
+          </label>
+          {players.map((player, index) => (
+            <div key={player.id} className="rounded-lg border border-black/5 p-3">
+              <label className="block">
+                <span className="text-xs font-medium">Player {index + 1}</span>
+                <input
+                  value={player.displayName}
+                  onChange={(event) =>
+                    setPlayers((current) =>
+                      current.map((item) =>
+                        item.id === player.id
+                          ? { ...item, displayName: event.target.value }
+                          : item,
+                      ),
+                    )
+                  }
+                  className="mt-1 w-full rounded-lg border border-black/10 px-3 py-2 text-base text-black outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+                />
+              </label>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {(["brit", "kiwi"] as const).map((nationality) => (
+                  <label
+                    key={nationality}
+                    className="flex items-center gap-2 rounded-lg border border-black/10 px-3 py-2 text-sm has-[:checked]:border-brand has-[:checked]:bg-brand/10"
+                  >
+                    <input
+                      type="radio"
+                      name={`edit_nat_${player.id}`}
+                      checked={player.nationality === nationality}
+                      onChange={() =>
+                        setPlayers((current) =>
+                          current.map((item) =>
+                            item.id === player.id
+                              ? { ...item, nationality }
+                              : item,
+                          ),
+                        )
+                      }
+                      className="accent-brand"
+                    />
+                    {nationality === "brit" ? "🇬🇧 Brit" : "🇳🇿 Kiwi"}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              disabled={editPending}
+              className="min-h-11 rounded-lg border border-black/10 px-3 py-2 font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={editPending}
+              className="min-h-11 rounded-lg bg-brand px-3 py-2 font-semibold text-white disabled:opacity-60"
+            >
+              {editPending ? "Saving…" : "Save team"}
+            </button>
+          </div>
+          {editState.done && (
+            <p className="text-center text-xs font-medium text-brand-dark">
+              Team saved ✓
+            </p>
+          )}
+          {editState.error && <ErrorNote>{editState.error}</ErrorNote>}
+        </form>
+        <form
+          action={removeAction}
+          onSubmit={(event) => {
+            if (
+              !window.confirm(
+                `Remove ${label} and delete their generated logins? This cannot be undone.`,
+              )
+            ) {
+              event.preventDefault();
+            }
+          }}
+          className="mt-3 border-t border-black/5 pt-3 text-center"
+        >
+          <input type="hidden" name="tournamentId" value={tournamentId} />
+          <input type="hidden" name="teamId" value={team.id} />
+          <button
+            type="submit"
+            disabled={removePending}
+            className="text-xs font-medium text-red-700 disabled:opacity-60"
+          >
+            {removePending ? "Removing…" : "Remove this team & logins"}
+          </button>
+          {removeState.error && (
+            <p role="alert" className="mt-2 text-xs text-red-800">
+              {removeState.error}
+            </p>
+          )}
+        </form>
+      </li>
+    );
+  }
+
+  return (
+    <li className="rounded-lg border border-black/5 bg-brand/5 px-3 py-2 text-sm">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <span className="font-medium">{label}</span>
+          <span className="ml-2 text-foreground/60">
+            {team.players
+              .map((player) => `${player.display_name}${flag(player.nationality)}`)
+              .join(", ")}
+          </span>
+        </div>
+        {editable && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="shrink-0 text-xs font-medium text-brand hover:text-brand-dark"
+          >
+            Edit
+          </button>
+        )}
+      </div>
+    </li>
   );
 }
 

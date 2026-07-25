@@ -5,7 +5,7 @@ A small web app for running a one-day lawn-bowls tournament — the 7th **Spring
 Everyone gets a username + password, sees their next fixture and rink, enters scores, checks the group tables and bracket, and votes for the fun awards. One admin (the host) sets the whole thing up and can fix anything on the day.
 
 - **Event date:** Saturday 1 August 2026
-- **Status:** live app, event-day hardened and ready for final deployment checks
+- **Status:** live app, event-day hardened and deployed
 - **This is a personal project** — unrelated to any employer.
 
 ## Tech
@@ -15,7 +15,7 @@ Everyone gets a username + password, sees their next fixture and rink, enters sc
 | App | Next.js (App Router) + TypeScript + Tailwind | One framework for UI + server; great hot-reload |
 | Data / auth / realtime | Supabase (Postgres) | Free tier; realtime powers the live "up next" screens |
 | Hosting | Vercel | Free; one link to share |
-| Tests | Vitest, React Testing Library, Playwright, Stryker (mutation) | See [test strategy](docs/test-strategy.md) |
+| Tests | Vitest domain/property suite + live Supabase smoke script | See [test strategy](docs/test-strategy.md) |
 
 ## Docs
 
@@ -33,6 +33,8 @@ Everyone gets a username + password, sees their next fixture and rink, enters sc
 ```bash
 npm install
 npm run dev      # http://localhost:3000
-npm test         # unit + integration (Vitest)
-npm run test:e2e # end-to-end (Playwright)
+npm test         # domain + property tests (Vitest)
+npm run typecheck
+npm run lint
+npm run build
 ```

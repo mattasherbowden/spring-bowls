@@ -12,6 +12,12 @@ export interface TeamStanding {
   points: number;
   /** 1-based finishing position within the group. */
   rank: number;
+  /**
+   * True when all published tiebreak numbers are identical and the order is
+   * currently only the deterministic fallback. If this crosses qualification,
+   * an organiser must explicitly confirm the final order.
+   */
+  terminalTie: boolean;
 }
 
 function h2hKey(a: TeamId, b: TeamId): string {
@@ -48,6 +54,7 @@ export function computeStandings(
       shotDiff: 0,
       points: 0,
       rank: 0,
+      terminalTie: false,
     });
   }
 
@@ -115,6 +122,12 @@ export function computeStandings(
       if (winner === rows[i + 1].teamId) {
         [rows[i], rows[i + 1]] = [rows[i + 1], rows[i]];
       }
+      if (!winner) {
+        rows[i].terminalTie = true;
+        rows[i + 1].terminalTie = true;
+      }
+    } else if (j - i > 2) {
+      for (let tied = i; tied < j; tied++) rows[tied].terminalTie = true;
     }
     i = j;
   }
@@ -124,4 +137,67 @@ export function computeStandings(
   });
 
   return rows;
+}
+
+function samePublishedTiebreak(a: TeamStanding, b: TeamStanding): boolean {
+  return (
+    a.points === b.points &&
+    a.shotDiff === b.shotDiff &&
+    a.shotsFor === b.shotsFor &&
+    a.shotsAgainst === b.shotsAgainst
+  );
+}
+
+/**
+ * Return the exact-tie block only when the qualification line splits it.
+ * Ties entirely above or below the line do not affect who progresses.
+ */
+export function qualificationTieAtCutoff(
+  rows: TeamStanding[],
+  advance: number,
+): TeamStanding[] {
+  const cutoff = Math.floor(advance);
+  if (cutoff < 1 || cutoff >= rows.length) return [];
+  const boundary = rows[cutoff - 1];
+  if (!boundary?.terminalTie) return [];
+  const tied = rows.filter(
+    (row) => row.terminalTie && samePublishedTiebreak(row, boundary),
+  );
+  const qualifying = tied.filter((row) => row.rank <= cutoff).length;
+  return qualifying > 0 && qualifying < tied.length ? tied : [];
+}
+
+/**
+ * Apply an organiser-confirmed order to one complete terminal-tie block.
+ * Invalid/stale overrides are ignored, which keeps later score corrections safe.
+ */
+export function applyQualificationOverride(
+  rows: TeamStanding[],
+  orderedTeamIds: TeamId[] | null | undefined,
+): TeamStanding[] {
+  if (!orderedTeamIds || orderedTeamIds.length < 2) return rows;
+  const unique = new Set(orderedTeamIds);
+  if (unique.size !== orderedTeamIds.length) return rows;
+
+  const indexes = rows
+    .map((row, index) => (unique.has(row.teamId) ? index : -1))
+    .filter((index) => index >= 0);
+  if (indexes.length !== orderedTeamIds.length) return rows;
+  const first = Math.min(...indexes);
+  const block = rows.slice(first, first + orderedTeamIds.length);
+  if (
+    block.length !== orderedTeamIds.length ||
+    block.some((row) => !unique.has(row.teamId) || !row.terminalTie) ||
+    block.some((row) => !samePublishedTiebreak(row, block[0]))
+  ) {
+    return rows;
+  }
+
+  const byId = new Map(block.map((row) => [row.teamId, row]));
+  const ordered = orderedTeamIds.map((id) => byId.get(id));
+  if (ordered.some((row) => !row)) return rows;
+
+  const result = [...rows];
+  result.splice(first, block.length, ...(ordered as TeamStanding[]));
+  return result.map((row, index) => ({ ...row, rank: index + 1 }));
 }

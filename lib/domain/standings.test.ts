@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { computeStandings, type TeamStanding } from "./standings";
+import {
+  applyQualificationOverride,
+  computeStandings,
+  qualificationTieAtCutoff,
+  type TeamStanding,
+} from "./standings";
 import type { Fixture, TeamId } from "./types";
 
 function game(
@@ -81,5 +86,46 @@ describe("computeStandings", () => {
     const rows = computeStandings(["A", "B"], [walkover("g", "A", "B", "A", 10)]);
     expect(row(rows, "A")).toMatchObject({ points: 1, shotDiff: 10, rank: 1 });
     expect(row(rows, "B")).toMatchObject({ points: 0, shotDiff: -10, rank: 2 });
+  });
+
+  it("OD-10: exposes an exact three-way qualification tie instead of silently advancing by id", () => {
+    const rows = computeStandings(
+      ["A", "B", "C"],
+      [
+        game("1", "A", "B", [[1, 0]]),
+        game("2", "B", "C", [[1, 0]]),
+        game("3", "C", "A", [[1, 0]]),
+      ],
+    );
+
+    expect(rows.every((standing) => standing.terminalTie)).toBe(true);
+    expect(qualificationTieAtCutoff(rows, 2).map((standing) => standing.teamId)).toEqual([
+      "A",
+      "B",
+      "C",
+    ]);
+    expect(qualificationTieAtCutoff(rows, 3)).toEqual([]);
+  });
+
+  it("OD-10: an organiser-confirmed tie order replaces the hidden fallback deterministically", () => {
+    const rows = computeStandings(
+      ["A", "B", "C"],
+      [
+        game("1", "A", "B", [[1, 0]]),
+        game("2", "B", "C", [[1, 0]]),
+        game("3", "C", "A", [[1, 0]]),
+      ],
+    );
+
+    expect(
+      applyQualificationOverride(rows, ["C", "A", "B"]).map(
+        (standing) => standing.teamId,
+      ),
+    ).toEqual(["C", "A", "B"]);
+    expect(
+      applyQualificationOverride(rows, ["C", "C", "A"]).map(
+        (standing) => standing.teamId,
+      ),
+    ).toEqual(["A", "B", "C"]);
   });
 });

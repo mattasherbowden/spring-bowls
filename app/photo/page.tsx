@@ -5,6 +5,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { HomeButton } from "../_components/home-button";
 import { SBMark } from "../_components/sb-mark";
 import { PhotoDoneButton, PhotoEmailForm } from "./_forms";
+import {
+  throwIfAuthUnavailable,
+  throwIfSupabaseError,
+} from "@/lib/supabase/query-error";
 
 export default async function PhotoPage({
   searchParams,
@@ -17,38 +21,43 @@ export default async function PhotoPage({
   const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
+  throwIfAuthUnavailable(authError, "photo authentication");
   if (!user) redirect("/");
 
   const admin = createAdminClient();
-  const { data: tournament } = await admin
+  const { data: tournament, error: tournamentError } = await admin
     .from("tournament")
     .select("id")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
+  throwIfSupabaseError(tournamentError, "photo tournament");
 
   let partnerName: string | null = null;
   let email: string | null = null;
   let done = false;
   let isPlayer = false;
   if (tournament) {
-    const { data: me } = await admin
+    const { data: me, error: playerError } = await admin
       .from("player")
       .select("photo_partner_id, photo_done, photo_email")
       .eq("tournament_id", tournament.id)
       .eq("profile_id", user.id)
       .maybeSingle();
+    throwIfSupabaseError(playerError, "photo player");
     if (me) {
       isPlayer = true;
       done = me.photo_done;
       email = me.photo_email;
       if (me.photo_partner_id) {
-        const { data: partner } = await admin
+        const { data: partner, error: partnerError } = await admin
           .from("player")
           .select("display_name")
           .eq("id", me.photo_partner_id)
           .maybeSingle();
+        throwIfSupabaseError(partnerError, "photo partner");
         partnerName = partner?.display_name ?? null;
       }
     }

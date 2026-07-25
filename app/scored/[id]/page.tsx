@@ -3,6 +3,10 @@ import { HomeButton } from "../../_components/home-button";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  throwIfAuthUnavailable,
+  throwIfSupabaseError,
+} from "@/lib/supabase/query-error";
 
 type TeamLite = { id: string; name: string | null; players: { display_name: string }[] };
 
@@ -16,11 +20,13 @@ export default async function ScoredPage({
   const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
+  throwIfAuthUnavailable(authError, "score confirmation authentication");
   if (!user) redirect("/");
 
   const admin = createAdminClient();
-  const [{ data: fixture }, { data: tournament }] = await Promise.all([
+  const [fixtureResult, tournamentResult] = await Promise.all([
     admin
       .from("fixture")
       .select("shots_a, shots_b, team_a_id, team_b_id")
@@ -33,6 +39,10 @@ export default async function ScoredPage({
       .limit(1)
       .maybeSingle(),
   ]);
+  throwIfSupabaseError(fixtureResult.error, "saved fixture");
+  throwIfSupabaseError(tournamentResult.error, "saved fixture tournament");
+  const fixture = fixtureResult.data;
+  const tournament = tournamentResult.data;
 
   const votingOpen = tournament?.voting_status === "open";
 
@@ -40,10 +50,11 @@ export default async function ScoredPage({
   let bName = "Team B";
   if (fixture) {
     const ids = [fixture.team_a_id, fixture.team_b_id].filter(Boolean) as string[];
-    const { data: teams } = await admin
+    const { data: teams, error: teamsError } = await admin
       .from("team")
       .select("id, name, players:player(display_name)")
       .in("id", ids);
+    throwIfSupabaseError(teamsError, "saved fixture teams");
     const label = (tid: string | null) => {
       const t = ((teams ?? []) as TeamLite[]).find((x) => x.id === tid);
       return t ? (t.name ?? t.players.map((p) => p.display_name).join(" & ")) : "—";

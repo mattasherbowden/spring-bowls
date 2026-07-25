@@ -4,34 +4,43 @@ import { createClient } from "@/lib/supabase/server";
 import { TeamBuilder } from "./_builder";
 import { GenerateScheduleButton } from "./_generate";
 import { ResetButton } from "./_reset";
+import {
+  throwIfAuthUnavailable,
+  throwIfSupabaseError,
+} from "@/lib/supabase/query-error";
 
 export default async function TeamsPage() {
   const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
+  throwIfAuthUnavailable(authError, "team setup authentication");
   if (!user) redirect("/");
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profile")
     .select("is_owner")
     .eq("id", user.id)
     .single();
+  throwIfSupabaseError(profileError, "team setup profile");
   if (!profile?.is_owner) redirect("/");
 
-  const { data: tournament } = await supabase
+  const { data: tournament, error: tournamentError } = await supabase
     .from("tournament")
     .select("id, name, team_size, planned_teams, status")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
+  throwIfSupabaseError(tournamentError, "team setup tournament");
   if (!tournament) redirect("/setup");
 
-  const { data: teams } = await supabase
+  const { data: teams, error: teamsError } = await supabase
     .from("team")
-    .select("id, name, players:player(display_name, nationality)")
+    .select("id, name, players:player(id, display_name, nationality)")
     .eq("tournament_id", tournament.id)
     .order("created_at", { ascending: true });
+  throwIfSupabaseError(teamsError, "team setup roster");
 
   return (
     <main className="flex flex-1 flex-col items-center px-5 py-10">
@@ -57,6 +66,7 @@ export default async function TeamsPage() {
 
         <div className="mt-6">
           <TeamBuilder
+            tournamentId={tournament.id}
             teamSize={tournament.team_size}
             plannedTeams={tournament.planned_teams}
             teams={teams ?? []}
