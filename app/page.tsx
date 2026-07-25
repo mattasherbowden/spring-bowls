@@ -6,6 +6,7 @@ import { CreateOwnerForm } from "./_components/create-owner-form";
 import { Countdown } from "./_components/countdown";
 import { logout } from "./actions";
 import { OrganiserLinks } from "./_components/organiser-links";
+import { upNextInfo } from "@/lib/domain/up-next";
 import { computeStandings } from "@/lib/domain/standings";
 import type { Fixture } from "@/lib/domain/types";
 
@@ -536,25 +537,6 @@ async function PlayerHome({
   const upNext = unplayed[0];
   const coming = unplayed.slice(1);
 
-  // The game directly ahead of yours on the same rink that's still to be played
-  // — so you know which game to watch (and whose score to chase).
-  const isOpenStatus = (s: string) => s !== "completed" && s !== "walkover";
-  let aheadGame: (typeof allFixtures)[number] | null = null;
-  let aheadCount = 0;
-  if (upNext && upNext.rink != null) {
-    const ahead = allFixtures
-      .filter(
-        (f) =>
-          f.rink === upNext.rink &&
-          f.id !== upNext.id &&
-          f.order_index < upNext.order_index &&
-          isOpenStatus(f.status),
-      )
-      .sort((a, b) => b.order_index - a.order_index);
-    aheadCount = ahead.length;
-    aheadGame = ahead[0] ?? null;
-  }
-
   const view = (f: FixtureLite) => {
     const iAmA = f.team_a_id === teamId;
     return {
@@ -618,13 +600,11 @@ async function PlayerHome({
           // Which state is the tile in? waiting = a game ahead of you on your
           // rink is still on; live = your rink is clear so you're up; tbd =
           // opponent not decided; unknown = ready but no rink assigned yet.
-          const status: "tbd" | "waiting" | "live" | "unknown" = !ready
-            ? "tbd"
-            : aheadGame
-              ? "waiting"
-              : upNext.rink != null
-                ? "live"
-                : "unknown";
+          const { status, aheadGame, aheadCount } = upNextInfo(
+            upNext,
+            allFixtures,
+            ready,
+          );
           const tileClass =
             status === "live"
               ? "rounded-2xl bg-brand/15 p-5 ring-2 ring-brand/50"
