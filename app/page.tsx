@@ -5,6 +5,7 @@ import { LoginForm } from "./_components/login-form";
 import { CreateOwnerForm } from "./_components/create-owner-form";
 import { Countdown } from "./_components/countdown";
 import { logout } from "./actions";
+import { OrganiserLinks } from "./_components/organiser-links";
 import { computeStandings } from "@/lib/domain/standings";
 import type { Fixture } from "@/lib/domain/types";
 
@@ -282,6 +283,8 @@ export default async function Home() {
           advance={tournament.advance}
           teamId={teamId}
           firstName={firstName}
+          isOwner={!!profile?.is_owner}
+          isAdmin={!!profile?.is_admin}
         />
         <LogoutButton />
       </Shell>
@@ -372,6 +375,12 @@ export default async function Home() {
         {profile?.is_owner && (
           <div className="mt-4 flex flex-col items-start gap-1.5">
             <Link
+              href="/setup/logins"
+              className="text-sm font-medium text-brand hover:text-brand-dark"
+            >
+              Logins &amp; passwords →
+            </Link>
+            <Link
               href="/setup/event"
               className="text-sm font-medium text-brand hover:text-brand-dark"
             >
@@ -413,11 +422,15 @@ async function PlayerHome({
   advance,
   teamId,
   firstName,
+  isOwner,
+  isAdmin,
 }: {
   tournamentId: string;
   advance: number;
   teamId: string;
   firstName: string;
+  isOwner: boolean;
+  isAdmin: boolean;
 }) {
   const supabase = await createClient();
 
@@ -759,6 +772,20 @@ async function PlayerHome({
           </tbody>
         </table>
       </section>
+
+      {(isOwner || isAdmin) && (
+        <section className="mt-6 rounded-2xl border border-brand/20 bg-brand/5 p-4">
+          <h3 className="text-sm font-semibold text-brand-dark">
+            🛠 Organiser tools
+          </h3>
+          <p className="mt-0.5 text-xs text-foreground/60">
+            You&apos;re playing and running the show — your tools live here.
+          </p>
+          <div className="mt-3">
+            <OrganiserLinks isOwner={isOwner} isAdmin={isAdmin} />
+          </div>
+        </section>
+      )}
 
       <Link
         href="/day"

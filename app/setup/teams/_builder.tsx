@@ -95,7 +95,13 @@ export function TeamBuilder({
                 <tr key={p.username} className="border-t border-amber-200">
                   <td className="py-1.5">{p.displayName}</td>
                   <td className="py-1.5 font-mono">{p.username}</td>
-                  <td className="py-1.5 font-mono">{p.password}</td>
+                  <td className="py-1.5 font-mono">
+                    {p.password || (
+                      <span className="font-sans text-xs text-amber-700">
+                        uses your login
+                      </span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -131,6 +137,14 @@ export function TeamBuilder({
               <NatRadio index={i} value="brit" label="🇬🇧 Brit" defaultChecked={i === 0} />
               <NatRadio index={i} value="kiwi" label="🇳🇿 Kiwi" defaultChecked={i === 1} />
             </div>
+            <label className="mt-2 flex items-center gap-2 text-xs text-foreground/60">
+              <input
+                type="checkbox"
+                name={`me_${i}`}
+                className="accent-brand"
+              />
+              This is me — link to my organiser login (no separate password)
+            </label>
           </div>
         ))}
 

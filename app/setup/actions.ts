@@ -121,8 +121,11 @@ export async function addTeam(
   if (!tournament) return { error: "No active tournament — create one first." };
 
   const teamSize = tournament.team_size as number;
-  const players: { displayName: string; nationality: "brit" | "kiwi" | null }[] =
-    [];
+  const players: {
+    displayName: string;
+    nationality: "brit" | "kiwi" | null;
+    isMe: boolean;
+  }[] = [];
   for (let i = 0; i < teamSize; i++) {
     const name = String(fd.get(`name_${i}`) ?? "").trim();
     const nat = String(fd.get(`nat_${i}`) ?? "");
@@ -130,11 +133,26 @@ export async function addTeam(
       players.push({
         displayName: name,
         nationality: nat === "brit" || nat === "kiwi" ? nat : null,
+        isMe: fd.get(`me_${i}`) === "on",
       });
     }
   }
   if (players.length !== teamSize) {
     return { error: `Enter all ${teamSize} player names.` };
+  }
+  if (players.filter((p) => p.isMe).length > 1) {
+    return { error: "Only one player can be marked 'This is me'." };
+  }
+  if (players.some((p) => p.isMe)) {
+    const { data: existingMe } = await admin
+      .from("player")
+      .select("id")
+      .eq("tournament_id", tournament.id)
+      .eq("profile_id", ownerId)
+      .maybeSingle();
+    if (existingMe) {
+      return { error: "You're already added as a player in this tournament." };
+    }
   }
   const teamName = String(fd.get("teamName") ?? "").trim() || null;
 
@@ -149,6 +167,27 @@ export async function addTeam(
   const output: CreatedPlayer[] = [];
   try {
     for (const p of players) {
+      if (p.isMe) {
+        // Link this slot to the owner's existing login — no new account.
+        const { error: meErr } = await admin.from("player").insert({
+          tournament_id: tournament.id,
+          team_id: team.id,
+          profile_id: ownerId,
+          display_name: p.displayName,
+          nationality: p.nationality,
+          role: "player",
+        });
+        if (meErr) {
+          throw new Error(`your player slot (${meErr.message})`);
+        }
+        output.push({
+          displayName: p.displayName,
+          username: "— your organiser login —",
+          password: "",
+        });
+        continue;
+      }
+
       const username = await uniqueUsername(admin, p.displayName);
       const password = generatePassword();
       const email = `${username.toLowerCase()}@${EMAIL_DOMAIN}`;
@@ -164,6 +203,7 @@ export async function addTeam(
         username,
         display_name: p.displayName,
         is_owner: false,
+        login_password: password,
       });
       if (profErr) {
         throw new Error(`a profile for ${p.displayName} (${profErr.message})`);
@@ -355,6 +395,7 @@ export async function createHelper(
     display_name: displayName,
     is_owner: false,
     is_admin: true,
+    login_password: password,
   });
   if (profErr) {
     await deleteAuthUser(created.id);
@@ -389,6 +430,7 @@ export async function resetHelperPassword(
   const password = generatePassword();
   const ok = await setAuthUserPassword(id, password);
   if (!ok) return { error: "Could not reset the password." };
+  await admin.from("profile").update({ login_password: password }).eq("id", id);
   return { reset: { username: p.username as string, password } };
 }
 
