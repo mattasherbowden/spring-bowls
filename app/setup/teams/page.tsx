@@ -60,6 +60,7 @@ export default async function TeamsPage() {
             teamSize={tournament.team_size}
             plannedTeams={tournament.planned_teams}
             teams={teams ?? []}
+            rosterLocked={tournament.status !== "setup"}
           />
         </div>
 
@@ -77,7 +78,10 @@ export default async function TeamsPage() {
         </div>
 
         <div className="mt-8 border-t border-black/5 pt-5">
-          <ResetButton />
+          <ResetButton
+            live={tournament.status !== "setup"}
+            tournamentId={tournament.id}
+          />
         </div>
       </div>
     </main>

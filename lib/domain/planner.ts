@@ -97,7 +97,23 @@ export function planTournament(input: PlanInput): TournamentPlan {
   const bracketSize = knockoutRounds > 0 ? 2 ** knockoutRounds : 0;
   const byes = bracketSize > 0 ? bracketSize - qualifiers : 0;
 
-  const groupWaves = Math.ceil(groupGames / rinks) || 0;
+  // Dividing game count by rink count can be impossible in practice because a
+  // team cannot occupy two rinks at once. Use the same physical wave packer as
+  // the real draw so the setup estimate respects those constraints.
+  const plannedGroups = groups.map((size, groupIndex) => ({
+    label: String.fromCharCode(65 + groupIndex),
+    teamIds: Array.from(
+      { length: size },
+      (_, teamIndex) => `g${groupIndex}-t${teamIndex}`,
+    ),
+  }));
+  const plannedSchedule = buildGroupSchedule(plannedGroups, rinks);
+  const groupWaves =
+    plannedSchedule.length > 0
+      ? Math.max(
+          ...plannedSchedule.map((fixture) => Math.floor(fixture.order / rinks)),
+        ) + 1
+      : 0;
   const estMinutes = (groupWaves + knockoutWaves) * gameMinutes;
 
   const warnings: string[] = [];
@@ -134,3 +150,4 @@ export function planTournament(input: PlanInput): TournamentPlan {
     warnings,
   };
 }
+import { buildGroupSchedule } from "./schedule";

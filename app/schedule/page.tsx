@@ -1,11 +1,16 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { HomeButton } from "../_components/home-button";
+import { LiveRefresh } from "../_components/live-refresh";
 import { SBMark } from "../_components/sb-mark";
 import { createClient } from "@/lib/supabase/server";
 import { computeStandings } from "@/lib/domain/standings";
 import { buildBracket } from "@/lib/domain/bracket";
-import { refreshKnockout } from "../setup/actions";
+import {
+  auditGroupSchedule,
+  auditKnockoutSchedule,
+} from "@/lib/domain/schedule-audit";
+import { RefreshKnockoutButton } from "./_refresh-button";
 import type { Fixture } from "@/lib/domain/types";
 
 type PlayerLite = { display_name: string; nationality: string | null };
@@ -31,6 +36,7 @@ type FixtureRow = {
 };
 type KoRow = {
   id: string;
+  match_code: string | null;
   round: number | null;
   team_a_source: string | null;
   team_b_source: string | null;
@@ -39,11 +45,8 @@ type KoRow = {
   status: string;
   shots_a: number | null;
   shots_b: number | null;
+  winner_team_id: string | null;
 };
-
-function flag(n: string | null): string {
-  return n === "brit" ? " 🇬🇧" : n === "kiwi" ? " 🇳🇿" : "";
-}
 
 function sourceLabel(s: string | null): string {
   if (!s) return "TBD";
@@ -79,7 +82,7 @@ export default async function SchedulePage() {
 
   const { data: tournament } = await supabase
     .from("tournament")
-    .select("id, name, advance")
+    .select("id, name, advance, rink_count, ends_per_game, minutes_per_end")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
@@ -87,10 +90,11 @@ export default async function SchedulePage() {
 
   const { data: prof } = await supabase
     .from("profile")
-    .select("is_owner")
+    .select("is_owner, is_admin")
     .eq("id", user.id)
     .maybeSingle();
   const isOwner = !!prof?.is_owner;
+  const canManage = isOwner || !!prof?.is_admin;
 
   const { data: teamsData } = await supabase
     .from("team")
@@ -112,7 +116,7 @@ export default async function SchedulePage() {
   const { data: koData } = await supabase
     .from("fixture")
     .select(
-      "id, round, team_a_source, team_b_source, team_a_id, team_b_id, status, shots_a, shots_b",
+      "id, match_code, round, team_a_source, team_b_source, team_a_id, team_b_id, status, shots_a, shots_b, winner_team_id",
     )
     .eq("tournament_id", tournament.id)
     .eq("stage", "knockout")
@@ -125,11 +129,44 @@ export default async function SchedulePage() {
     if (!t) return "TBC";
     return t.name ?? t.players.map((p) => p.display_name).join(" & ");
   };
+  const scheduleAudit = auditGroupSchedule(
+    teams.map((team) => ({
+      id: team.id,
+      name: teamName(team.id),
+      groupLabel: team.group_label,
+    })),
+    fixtures.map((fixture) => ({
+      id: fixture.id,
+      groupLabel: fixture.group_label,
+      round: fixture.round,
+      rink: fixture.rink,
+      order: fixture.order_index,
+      teamA: fixture.team_a_id,
+      teamB: fixture.team_b_id,
+    })),
+    tournament.rink_count,
+  );
+  const knockoutIssues = auditKnockoutSchedule(
+    koFixtures.map((fixture) => ({
+      id: fixture.id,
+      matchCode: fixture.match_code,
+      round: fixture.round,
+      teamASource: fixture.team_a_source,
+      teamBSource: fixture.team_b_source,
+      teamA: fixture.team_a_id,
+      teamB: fixture.team_b_id,
+      status: fixture.status,
+      shotsA: fixture.shots_a,
+      shotsB: fixture.shots_b,
+      winnerTeam: fixture.winner_team_id,
+    })),
+  );
+  const drawIssues = [...scheduleAudit.issues, ...knockoutIssues];
 
   const completed: Fixture[] = fixtures
     .filter(
       (f) =>
-        f.status === "completed" &&
+        (f.status === "completed" || f.status === "walkover") &&
         f.team_a_id &&
         f.team_b_id &&
         f.shots_a != null &&
@@ -166,6 +203,31 @@ export default async function SchedulePage() {
     }
   }
   const projected = buildBracket(qualifierLabels);
+  const knockoutWaves = projected.reduce(
+    (sum, round) =>
+      sum +
+      Math.ceil(
+        round.matches.filter((match) => match.a !== null && match.b !== null)
+          .length / tournament.rink_count,
+      ),
+    0,
+  );
+  const plannedMinutes =
+    (scheduleAudit.waveCount + knockoutWaves) *
+    tournament.ends_per_game *
+    tournament.minutes_per_end;
+  const durationLabel =
+    plannedMinutes >= 60
+      ? `${Math.floor(plannedMinutes / 60)}h ${plannedMinutes % 60}m`
+      : `${plannedMinutes}m`;
+  const groupDone = fixtures.filter(
+    (fixture) =>
+      fixture.status === "completed" || fixture.status === "walkover",
+  ).length;
+  const knockoutDone = koFixtures.filter(
+    (fixture) =>
+      fixture.status === "completed" || fixture.status === "walkover",
+  ).length;
 
   const koByRound = new Map<number, KoRow[]>();
   for (const k of koFixtures) {
@@ -186,7 +248,49 @@ export default async function SchedulePage() {
           <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight">
             <SBMark className="mr-2" />Schedule
           </h1>
+          <div className="mt-2">
+            <LiveRefresh />
+          </div>
         </header>
+
+        {canManage && fixtures.length > 0 && (
+          <section
+            className={`mt-5 rounded-xl p-4 text-sm ring-1 ${
+              drawIssues.length === 0
+                ? "bg-brand/10 text-brand-dark ring-brand/25"
+                : "bg-red-50 text-red-900 ring-red-200"
+            }`}
+          >
+            <p className="font-semibold">
+              {drawIssues.length === 0
+                ? "✓ Draw checks passed"
+                : "⚠ Draw needs attention"}
+            </p>
+            {drawIssues.length === 0 ? (
+              <p className="mt-1 text-xs">
+                Every group pairing appears once and no team is double-booked
+                across the {scheduleAudit.waveCount} group-stage time waves.
+                The knockout dependency graph is also valid.
+              </p>
+            ) : (
+              <ul className="mt-1 list-disc space-y-1 pl-4 text-xs">
+                {drawIssues.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-2 border-t border-current/10 pt-2 text-xs">
+              Planned minimum: about {durationLabel} including the knockout,
+              before deciders, changeovers or overruns.
+            </p>
+            <p className="mt-1 text-xs">
+              Progress: {groupDone}/{fixtures.length} group games
+              {koFixtures.length > 0
+                ? ` · ${knockoutDone}/${koFixtures.length} knockout games`
+                : ""}
+            </p>
+          </section>
+        )}
 
         {fixtures.length === 0 ? (
           <p className="mt-6 text-center text-sm text-foreground/60">
@@ -256,7 +360,8 @@ export default async function SchedulePage() {
                       </h3>
                       <div className="mt-1 space-y-2">
                         {round.matches.map((k) => {
-                          const done = k.status === "completed";
+                          const done =
+                            k.status === "completed" || k.status === "walkover";
                           const slot = (
                             id: string | null,
                             source: string | null,
@@ -348,11 +453,7 @@ export default async function SchedulePage() {
               )}
 
               {isOwner && (
-                <form action={refreshKnockout} className="mt-3">
-                  <button className="text-xs font-medium text-brand hover:text-brand-dark">
-                    Refresh knockout
-                  </button>
-                </form>
+                <RefreshKnockoutButton />
               )}
             </section>
 
@@ -366,7 +467,8 @@ export default async function SchedulePage() {
                   {fixtures
                     .filter((f) => f.rink === rink)
                     .map((f) => {
-                      const done = f.status === "completed";
+                      const done =
+                        f.status === "completed" || f.status === "walkover";
                       return (
                         <li key={f.id}>
                           <Link
@@ -381,6 +483,12 @@ export default async function SchedulePage() {
                               {teamName(f.team_b_id)}
                             </span>
                             <span className="shrink-0 text-xs text-foreground/50">
+                              Wave{" "}
+                              {Math.floor(
+                                f.order_index /
+                                  Math.max(1, tournament.rink_count),
+                              ) + 1}
+                              {" · "}
                               {done
                                 ? "✓ done"
                                 : `Grp ${f.group_label} · R${f.round}`}

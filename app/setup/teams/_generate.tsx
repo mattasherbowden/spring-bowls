@@ -11,7 +11,19 @@ export function GenerateScheduleButton({ ready }: { ready: boolean }) {
   );
 
   return (
-    <form action={action} className="space-y-2">
+    <form
+      action={action}
+      onSubmit={(event) => {
+        if (
+          !window.confirm(
+            "Generate the draw now? This locks the roster and creates the live fixture list.",
+          )
+        ) {
+          event.preventDefault();
+        }
+      }}
+      className="space-y-2"
+    >
       <button
         type="submit"
         disabled={pending || !ready}

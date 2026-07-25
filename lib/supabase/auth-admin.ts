@@ -94,8 +94,9 @@ export async function createAuthUser(
   return { error: `${r.msg || "could not create login"} [key ${keyShape()}]` };
 }
 
-export async function deleteAuthUser(id: string): Promise<void> {
-  await adminFetch(`/auth/v1/admin/users/${id}`, "DELETE");
+export async function deleteAuthUser(id: string): Promise<boolean> {
+  const r = await adminFetch(`/auth/v1/admin/users/${id}`, "DELETE");
+  return r.ok;
 }
 
 export async function setAuthUserPassword(

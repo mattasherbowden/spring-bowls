@@ -2,8 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { HomeButton } from "../../_components/home-button";
 import { createClient } from "@/lib/supabase/server";
-import { ScoreForm, UnlockButton } from "./_scoreform";
-import { walkoverFixture } from "../actions";
+import { ScoreForm, UnlockButton, WalkoverButton } from "./_scoreform";
 
 type TeamRow = {
   id: string;
@@ -142,34 +141,16 @@ export default async function FixturePage({
               Awards a 10–0 win to the team that turned up.
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
-              <form action={walkoverFixture}>
-                <input type="hidden" name="fixtureId" value={fixture.id} />
-                <input
-                  type="hidden"
-                  name="winnerTeamId"
-                  value={fixture.team_a_id ?? ""}
-                />
-                <button
-                  type="submit"
-                  className="rounded-lg border border-black/10 px-3 py-1.5 text-sm font-medium hover:bg-black/[.03]"
-                >
-                  Win to {teamName(fixture.team_a_id)}
-                </button>
-              </form>
-              <form action={walkoverFixture}>
-                <input type="hidden" name="fixtureId" value={fixture.id} />
-                <input
-                  type="hidden"
-                  name="winnerTeamId"
-                  value={fixture.team_b_id ?? ""}
-                />
-                <button
-                  type="submit"
-                  className="rounded-lg border border-black/10 px-3 py-1.5 text-sm font-medium hover:bg-black/[.03]"
-                >
-                  Win to {teamName(fixture.team_b_id)}
-                </button>
-              </form>
+              <WalkoverButton
+                fixtureId={fixture.id}
+                winnerTeamId={fixture.team_a_id ?? ""}
+                teamName={teamName(fixture.team_a_id)}
+              />
+              <WalkoverButton
+                fixtureId={fixture.id}
+                winnerTeamId={fixture.team_b_id ?? ""}
+                teamName={teamName(fixture.team_b_id)}
+              />
             </div>
           </div>
         )}

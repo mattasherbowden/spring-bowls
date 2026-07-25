@@ -4,6 +4,7 @@ import { createHash, randomInt } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { syntheticEmail } from "@/lib/domain/auth";
 import {
   createAuthUser,
   deleteAuthUser,
@@ -11,47 +12,12 @@ import {
 } from "@/lib/supabase/auth-admin";
 
 const USERNAME_RE = /^[A-Za-z0-9._-]{2,32}$/;
-const EMAIL_DOMAIN = "springbowls.local";
 const MIN_PASSWORD = 8;
-
-/** Canonical (case/space-folded) username — matches the DB generated column. */
-function canonical(username: string): string {
-  return username.trim().toLowerCase();
-}
-
-/** Deterministic synthetic email from a validated, canonical username (D-0002). */
-function synthEmail(username: string): string {
-  return `${canonical(username)}@${EMAIL_DOMAIN}`;
-}
 
 export type AuthState = {
   error?: string;
   values?: { username?: string; displayName?: string };
 };
-
-export async function login(
-  _prev: AuthState,
-  formData: FormData,
-): Promise<AuthState> {
-  const username = String(formData.get("username") ?? "");
-  const password = String(formData.get("password") ?? "");
-  if (!username.trim() || !password) {
-    return { error: "Enter your username and password.", values: { username } };
-  }
-
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({
-    email: synthEmail(username),
-    password,
-  });
-  if (error) {
-    return {
-      error: "That username and password do not match.",
-      values: { username },
-    };
-  }
-  redirect("/");
-}
 
 export async function createOwner(
   _prev: AuthState,
@@ -86,7 +52,7 @@ export async function createOwner(
     return { error: "An owner already exists — please log in instead.", values };
   }
 
-  const created = await createAuthUser(synthEmail(username), password);
+  const created = await createAuthUser(syntheticEmail(username), password);
   if ("error" in created) {
     return { error: `Could not create the account: ${created.error}`, values };
   }
@@ -104,7 +70,7 @@ export async function createOwner(
 
   const supabase = await createClient();
   await supabase.auth.signInWithPassword({
-    email: synthEmail(username),
+    email: syntheticEmail(username),
     password,
   });
   redirect("/");
@@ -125,8 +91,6 @@ const RECOVERY_WORDS = [
   "clubhouse", "pennant", "verge", "roller", "shot", "jackhigh",
 ];
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 function hashCode(code: string): string {
   return createHash("sha256").update(code.trim().toLowerCase()).digest("hex");
 }
@@ -144,6 +108,8 @@ export async function generateRecoveryCode(
   _prev: RecoveryState,
   _fd: FormData,
 ): Promise<RecoveryState> {
+  void _prev;
+  void _fd;
   const supabase = await createClient();
   const {
     data: { user },

@@ -4,22 +4,19 @@ import { computeStandings } from "@/lib/domain/standings";
 import { buildBracket } from "@/lib/domain/bracket";
 import type { Fixture } from "@/lib/domain/types";
 
+export type KnockoutResolution = { error?: string };
+
 // Ensure the knockout fixtures exist and fill in real teams as groups (and
 // earlier knockout rounds) finish. Idempotent — safe to call after every score.
 export async function resolveKnockout(
   admin: SupabaseClient,
   tournamentId: string,
-): Promise<void> {
+): Promise<KnockoutResolution> {
   const koSelect =
     "id, match_code, team_a_source, team_b_source, team_a_id, team_b_id, status, winner_team_id";
 
   // These four reads are independent — fetch them together to cut round-trips.
-  const [
-    { data: t },
-    { data: teamsData },
-    { data: groupFxData },
-    { data: koData },
-  ] = await Promise.all([
+  const [tResult, teamsResult, groupFxResult, koResult] = await Promise.all([
     admin
       .from("tournament")
       .select("advance, rink_count")
@@ -42,15 +39,21 @@ export async function resolveKnockout(
       .order("round", { ascending: true })
       .order("match_code", { ascending: true }),
   ]);
-  if (!t) return;
+  const readError =
+    tResult.error ?? teamsResult.error ?? groupFxResult.error ?? koResult.error;
+  if (readError) {
+    return { error: `Could not load the knockout data: ${readError.message}` };
+  }
+  const t = tResult.data;
+  if (!t) return { error: "Tournament not found while refreshing the knockout." };
   const advance = t.advance as number;
   const rinkCount = Math.max(1, t.rink_count as number);
 
-  const teams = teamsData ?? [];
+  const teams = teamsResult.data ?? [];
   const groupLabels = [
     ...new Set(teams.map((x) => x.group_label).filter((l): l is string => !!l)),
   ].sort();
-  if (groupLabels.length === 0) return;
+  if (groupLabels.length === 0) return {};
 
   const groupSize = new Map<string, number>();
   for (const tm of teams) {
@@ -58,8 +61,8 @@ export async function resolveKnockout(
       groupSize.set(tm.group_label, (groupSize.get(tm.group_label) ?? 0) + 1);
   }
 
-  const groupFixtures = groupFxData ?? [];
-  let knockout = koData ?? [];
+  const groupFixtures = groupFxResult.data ?? [];
+  let knockout = koResult.data ?? [];
 
   // Create the bracket the first time.
   if (knockout.length === 0) {
@@ -70,20 +73,29 @@ export async function resolveKnockout(
       }
     }
     const rounds = buildBracket(qualifierLabels);
-    if (rounds.length === 0) return;
+    if (rounds.length === 0) return {};
     const rows = rounds.flatMap((r, ri) =>
-      r.matches.map((m) => ({
-        tournament_id: tournamentId,
-        stage: "knockout",
-        match_code: m.id,
-        round: ri + 1,
-        team_a_source: m.a,
-        team_b_source: m.b,
-        status: "pending",
-        order_index: 1000 + ri * 100,
-      })),
+      r.matches
+        // A one-sided first-round match is a bye, not a game. buildBracket has
+        // already carried that source into the next round.
+        .filter((m) => m.a !== null && m.b !== null)
+        .map((m) => ({
+          tournament_id: tournamentId,
+          stage: "knockout",
+          match_code: m.id,
+          round: ri + 1,
+          team_a_source: m.a,
+          team_b_source: m.b,
+          status: "pending",
+          order_index: 1000 + ri * 100,
+        })),
     );
-    await admin.from("fixture").insert(rows);
+    const { error: insertError } = await admin.from("fixture").insert(rows);
+    // Two simultaneous final group scores may both create the bracket. The
+    // unique index makes one lose harmlessly; any other insert error matters.
+    if (insertError && insertError.code !== "23505") {
+      return { error: `Could not create the knockout: ${insertError.message}` };
+    }
     const reload = await admin
       .from("fixture")
       .select(koSelect)
@@ -91,6 +103,9 @@ export async function resolveKnockout(
       .eq("stage", "knockout")
       .order("round", { ascending: true })
       .order("match_code", { ascending: true });
+    if (reload.error) {
+      return { error: `Could not reload the knockout: ${reload.error.message}` };
+    }
     knockout = reload.data ?? [];
   }
 
@@ -153,9 +168,29 @@ export async function resolveKnockout(
     return null;
   };
 
+  // Never silently rewrite history. This can only happen if an upstream group
+  // or knockout result changed after a dependent knockout game was completed
+  // (or in a very tight correction race). Leave every row untouched and make
+  // the inconsistency visible to the caller.
+  const completedConflicts = knockout.filter((k) => {
+    if (k.status !== "completed" && k.status !== "walkover") return false;
+    const a = resolveSrc(k.team_a_source);
+    const b = resolveSrc(k.team_b_source);
+    return (
+      (a !== null && k.team_a_id !== null && a !== k.team_a_id) ||
+      (b !== null && k.team_b_id !== null && b !== k.team_b_id)
+    );
+  });
+  if (completedConflicts.length > 0) {
+    return {
+      error:
+        "A completed knockout game no longer matches its source result. No bracket teams were changed; an organiser must review the correction.",
+    };
+  }
+
   let scheduledCount = knockout.filter((k) => k.status !== "pending").length;
 
-  const writes: PromiseLike<unknown>[] = [];
+  const writes = [];
   for (const k of knockout) {
     if (k.status === "completed" || k.status === "walkover") continue;
     const a = resolveSrc(k.team_a_source);
@@ -174,8 +209,22 @@ export async function resolveKnockout(
       scheduledCount++;
     }
     if (Object.keys(update).length > 0) {
-      writes.push(admin.from("fixture").update(update).eq("id", k.id));
+      writes.push(
+        admin
+          .from("fixture")
+          .update(update)
+          .eq("id", k.id)
+          // Never rewrite teams on a result that completed after our snapshot.
+          .in("status", ["pending", "scheduled"]),
+      );
     }
   }
-  await Promise.all(writes);
+  const results = await Promise.all(writes);
+  const failures = results.filter((result) => result.error);
+  if (failures.length > 0) {
+    return {
+      error: `Could not fill ${failures.length} knockout slot${failures.length === 1 ? "" : "s"} — refresh the knockout and try again.`,
+    };
+  }
+  return {};
 }

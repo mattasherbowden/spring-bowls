@@ -14,6 +14,7 @@ export function EventInfo({ ev }: { ev: EventInfoData }) {
   // Split the free-text details into blank-line-separated sections so each reads
   // as its own card instead of one pasted-message blob.
   const sections = (ev.details ?? "")
+    .replace(/\r/g, "")
     .split(/\n\s*\n/)
     .map((b) => b.trim())
     .filter(Boolean)

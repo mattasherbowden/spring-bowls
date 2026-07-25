@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { HomeButton } from "../_components/home-button";
 import { SBMark } from "../_components/sb-mark";
-import { togglePhotoDone, savePhotoEmail } from "./actions";
+import { PhotoDoneButton, PhotoEmailForm } from "./_forms";
 
 export default async function PhotoPage({
   searchParams,
@@ -53,9 +53,6 @@ export default async function PhotoPage({
       }
     }
   }
-
-  const inputCls =
-    "mt-1 w-full rounded-lg border border-black/10 px-3 py-2 text-base text-black outline-none focus:border-brand focus:ring-2 focus:ring-brand/30";
 
   return (
     <main className="flex flex-1 flex-col items-center px-5 py-8">
@@ -111,43 +108,11 @@ export default async function PhotoPage({
                 </Link>
               </div>
             ) : (
-              <form action={savePhotoEmail} className="mt-4">
-                <label className="block">
-                  <span className="text-sm font-medium">Your email</span>
-                  <input
-                    name="email"
-                    type="email"
-                    defaultValue={email ?? ""}
-                    placeholder="you@example.com"
-                    required
-                    className={inputCls}
-                  />
-                </label>
-                <button
-                  type="submit"
-                  className="mt-2 w-full rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand-dark"
-                >
-                  Save my email
-                </button>
-              </form>
+              <PhotoEmailForm email={email} />
             ))}
         </section>
 
-        {isPlayer && (
-          <form action={togglePhotoDone} className="mt-4">
-            <input type="hidden" name="done" value={done ? "false" : "true"} />
-            <button
-              type="submit"
-              className={
-                done
-                  ? "w-full rounded-xl bg-brand/15 px-4 py-3 text-sm font-semibold text-brand-dark ring-1 ring-brand/30"
-                  : "w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm font-medium hover:bg-black/[.03]"
-              }
-            >
-              {done ? "✓ Done — tap to undo" : "Mark as completed"}
-            </button>
-          </form>
-        )}
+        {isPlayer && <PhotoDoneButton done={done} />}
       </div>
     </main>
   );

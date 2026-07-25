@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { HomeButton } from "../../_components/home-button";
+import { LiveRefresh } from "../../_components/live-refresh";
 import { SBMark } from "../../_components/sb-mark";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -64,6 +65,7 @@ export default async function ResultsPage() {
     const cand =
       award.kind === "team"
         ? teams.map((t) => ({
+            id: t.id,
             label: teamLabel(t),
             count: countOf(award.key, t.id),
           }))
@@ -72,6 +74,7 @@ export default async function ResultsPage() {
               (p) => !award.nationality || p.nationality === award.nationality,
             )
             .map((p) => ({
+              id: p.id,
               label: `${flag(p.nationality)}${p.display_name}`,
               count: countOf(award.key, p.id),
             }));
@@ -104,6 +107,9 @@ export default async function ResultsPage() {
                 : "Voting hasn't opened yet."}
             {totalVotes > 0 && ` · ${totalVotes} vote${totalVotes === 1 ? "" : "s"} so far`}
           </p>
+          <div className="mt-2">
+            <LiveRefresh />
+          </div>
         </header>
 
         <div className="mt-6 space-y-3">
@@ -122,12 +128,18 @@ export default async function ResultsPage() {
                   <p className="mt-1 text-sm text-foreground/50">No votes yet.</p>
                 ) : (
                   <div className="mt-3 space-y-2">
-                    {rows.map((r, i) => (
-                      <div key={r.label}>
+                    {rows.map((r) => (
+                      <div key={r.id}>
                         <div className="flex justify-between text-sm">
-                          <span className={i === 0 ? "font-semibold" : ""}>
-                            {i === 0 ? "🏆 " : ""}
+                          <span
+                            className={r.count === max ? "font-semibold" : ""}
+                          >
+                            {r.count === max ? "🏆 " : ""}
                             {r.label}
+                            {rows.filter((row) => row.count === max).length > 1 &&
+                            r.count === max
+                              ? " (tie)"
+                              : ""}
                           </span>
                           <span className="tabular-nums text-foreground/60">
                             {r.count}

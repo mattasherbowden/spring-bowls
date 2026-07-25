@@ -56,6 +56,21 @@ describe("planTournament", () => {
     expect(p.estMinutes).toBe(180);
   });
 
+  it("does not underestimate a draw when teams, rather than rinks, are limiting", () => {
+    const p = planTournament({
+      ...base,
+      teams: 5,
+      rinks: 3,
+      advance: 1,
+      preferredGroupSize: 5,
+    });
+    // A five-team round robin has ten games, but it still needs five waves:
+    // only two games can run at once without double-booking a team.
+    expect(p.groups).toEqual([5]);
+    expect(p.groupGames).toBe(10);
+    expect(p.estMinutes).toBe(5 * p.gameMinutes);
+  });
+
   it("top-1 advancement yields fewer qualifiers and rounds", () => {
     const p = planTournament({ ...base, advance: 1 });
     expect(p.qualifiers).toBe(3);

@@ -53,4 +53,42 @@ describe("buildGroupSchedule", () => {
       expect(new Set(teams).size).toBe(teams.length);
     }
   });
+
+  it("never puts a team on two rinks in the same time wave", () => {
+    const rinks = 3;
+    const sched = buildGroupSchedule(groups, rinks);
+    const byWave = new Map<number, string[]>();
+    for (const fixture of sched) {
+      const wave = Math.floor(fixture.order / rinks);
+      const teams = byWave.get(wave) ?? [];
+      teams.push(fixture.teamA, fixture.teamB);
+      byWave.set(wave, teams);
+      expect(fixture.rink).toBe((fixture.order % rinks) + 1);
+    }
+    for (const teams of byWave.values()) {
+      expect(new Set(teams).size).toBe(teams.length);
+    }
+  });
+
+  it("packs the live 8-team shape into four valid waves", () => {
+    const sched = buildGroupSchedule(groups, 3);
+    expect(new Set(sched.map((f) => Math.floor(f.order / 3))).size).toBe(4);
+  });
+
+  it("keeps each team's rounds in order even for odd-sized groups", () => {
+    const sched = buildGroupSchedule(
+      [
+        { label: "A", teamIds: ["a1", "a2", "a3", "a4", "a5"] },
+        { label: "B", teamIds: ["b1", "b2", "b3"] },
+      ],
+      3,
+    );
+    for (const team of ["a1", "a2", "a3", "a4", "a5", "b1", "b2", "b3"]) {
+      const rounds = sched
+        .filter((f) => f.teamA === team || f.teamB === team)
+        .sort((a, b) => a.order - b.order)
+        .map((f) => f.round);
+      expect(rounds).toEqual([...rounds].sort((a, b) => a - b));
+    }
+  });
 });

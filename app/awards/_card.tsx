@@ -1,10 +1,16 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { castVote, type VoteState } from "./actions";
 import type { AwardDef } from "@/lib/domain/awards";
+import { ORGANISER_VOTE_MESSAGE } from "@/lib/domain/voting";
 
-type Nominee = { id: string; label: string; count: number };
+type Nominee = {
+  id: string;
+  label: string;
+  count: number;
+  organiser?: boolean;
+};
 
 export function AwardCard({
   award,
@@ -16,6 +22,7 @@ export function AwardCard({
   picks: string[];
 }) {
   const [state, action, pending] = useActionState(castVote, {} as VoteState);
+  const [notice, setNotice] = useState<string | null>(null);
   const picked = new Set(picks);
 
   return (
@@ -38,12 +45,26 @@ export function AwardCard({
         <input type="hidden" name="targetType" value={award.kind} />
         {nominees.map((n) => {
           const on = picked.has(n.id);
+          if (n.organiser) {
+            return (
+              <button
+                key={n.id}
+                type="button"
+                aria-disabled="true"
+                onClick={() => setNotice(ORGANISER_VOTE_MESSAGE)}
+                className="cursor-not-allowed rounded-full bg-black/[.03] px-3 py-1.5 text-sm text-foreground/45 opacity-70 ring-1 ring-black/5 transition hover:bg-black/[.05]"
+              >
+                {n.label}
+              </button>
+            );
+          }
           return (
             <button
               key={n.id}
               name="targetId"
               value={n.id}
               disabled={pending}
+              onClick={() => setNotice(null)}
               className={
                 "rounded-full px-3 py-1.5 text-sm ring-1 transition disabled:opacity-60 " +
                 (on
@@ -66,6 +87,15 @@ export function AwardCard({
           <p className="text-sm text-foreground/50">No eligible nominees.</p>
         )}
       </form>
+      {notice && (
+        <p
+          role="status"
+          aria-live="polite"
+          className="mt-2 rounded-lg bg-brand/10 px-3 py-2 text-sm text-brand-dark"
+        >
+          {notice}
+        </p>
+      )}
       {state.error && <p className="mt-2 text-sm text-red-800">{state.error}</p>}
     </section>
   );

@@ -13,7 +13,13 @@ function fx(over: Partial<RinkFixture> & { id: string }): RinkFixture {
 }
 
 // Your game: rink 2, tenth on the board.
-const me = { id: "me", rink: 2, order_index: 10 };
+const me = {
+  id: "me",
+  rink: 2,
+  order_index: 10,
+  team_a_id: "mine",
+  team_b_id: "opponent",
+};
 
 describe("isOpenStatus", () => {
   it("treats completed and walkover as no longer to-be-played", () => {
@@ -50,6 +56,7 @@ describe("upNextInfo", () => {
     expect(info.status).toBe("live");
     expect(info.aheadGame).toBeNull();
     expect(info.aheadCount).toBe(0);
+    expect(info.blocker).toBeNull();
   });
 
   it("is 'waiting' when an open game is ahead of you on your rink", () => {
@@ -63,8 +70,68 @@ describe("upNextInfo", () => {
     );
     expect(info.status).toBe("waiting");
     expect(info.aheadCount).toBe(2);
+    expect(info.blocker).toBe("rink");
     // aheadGame is the nearest one (highest order_index below yours).
     expect(info.aheadGame?.id).toBe("nearest");
+  });
+
+  it("waits when either team is still playing an earlier game on another rink", () => {
+    const info = upNextInfo(
+      me,
+      [
+        fx({
+          id: "opponent-playing",
+          rink: 4,
+          order_index: 8,
+          team_a_id: "someone",
+          team_b_id: "opponent",
+          status: "scheduled",
+        }),
+      ],
+      true,
+    );
+    expect(info.status).toBe("waiting");
+    expect(info.blocker).toBe("team");
+    expect(info.aheadGame?.id).toBe("opponent-playing");
+    expect(info.aheadCount).toBe(0);
+  });
+
+  it("ignores an unrelated open game on another rink", () => {
+    const info = upNextInfo(
+      me,
+      [
+        fx({
+          id: "unrelated",
+          rink: 4,
+          order_index: 8,
+          team_a_id: "other-a",
+          team_b_id: "other-b",
+          status: "scheduled",
+        }),
+      ],
+      true,
+    );
+    expect(info.status).toBe("live");
+    expect(info.blocker).toBeNull();
+  });
+
+  it("ignores a completed earlier game involving one of the teams", () => {
+    const info = upNextInfo(
+      me,
+      [
+        fx({
+          id: "opponent-done",
+          rink: 4,
+          order_index: 8,
+          team_a_id: "someone",
+          team_b_id: "opponent",
+          status: "completed",
+        }),
+      ],
+      true,
+    );
+    expect(info.status).toBe("live");
+    expect(info.blocker).toBeNull();
   });
 
   it("is 'unknown' when ready but no rink is assigned yet", () => {
@@ -76,6 +143,7 @@ describe("upNextInfo", () => {
     expect(info.status).toBe("unknown");
     expect(info.aheadGame).toBeNull();
     expect(info.aheadCount).toBe(0);
+    expect(info.blocker).toBeNull();
   });
 
   it("does not count finished games ahead (completed or walkover)", () => {

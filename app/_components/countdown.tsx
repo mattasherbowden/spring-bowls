@@ -18,9 +18,13 @@ export function Countdown({ target }: { target: string }) {
   // never mismatches the client during hydration.
   const [nowMs, setNowMs] = useState<number | null>(null);
   useEffect(() => {
-    setNowMs(Date.now());
-    const t = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(t);
+    const tick = () => setNowMs(Date.now());
+    const first = setTimeout(tick, 0);
+    const interval = setInterval(tick, 1000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(interval);
+    };
   }, []);
 
   if (nowMs === null) {

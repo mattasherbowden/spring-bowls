@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 
 // Refreshes the Supabase auth session on every request and keeps the auth
 // cookies in sync, so logged-in state survives navigation.
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

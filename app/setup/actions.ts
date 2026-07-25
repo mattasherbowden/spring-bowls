@@ -114,11 +114,17 @@ export async function addTeam(
   const admin = createAdminClient();
   const { data: tournament } = await admin
     .from("tournament")
-    .select("id, team_size")
+    .select("id, team_size, status")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
   if (!tournament) return { error: "No active tournament — create one first." };
+  if (tournament.status !== "setup") {
+    return {
+      error:
+        "The draw is live, so the roster is locked. Do not add a team after fixtures exist.",
+    };
+  }
 
   const teamSize = tournament.team_size as number;
   const players: {
@@ -243,12 +249,14 @@ export async function addTeam(
 
 // ---------- generate the schedule (auto-draw the groups and lock) ----------
 
-export type GenerateState = { error?: string };
+export type GenerateState = { error?: string; done?: boolean };
 
 export async function generateSchedule(
   _prev: GenerateState,
   _fd: FormData,
 ): Promise<GenerateState> {
+  void _prev;
+  void _fd;
   const ownerId = await currentOwnerId();
   if (!ownerId) return { error: "Only the owner can generate the schedule." };
 
@@ -271,34 +279,17 @@ export async function generateSchedule(
     return { error: "Add at least 2 teams before generating the schedule." };
   }
 
-  // Atomically claim the setup→live transition so a double-tap (or a retry on
-  // patchy signal) can't generate the schedule twice. Only the caller whose
-  // conditional update actually flips setup→live proceeds; the rest bounce out.
-  const { data: claim } = await admin
-    .from("tournament")
-    .update({ status: "live" })
-    .eq("id", t.id)
-    .eq("status", "setup")
-    .select("id");
-  if (!claim || claim.length === 0) redirect("/schedule");
-
   const sizes = splitIntoGroups(teams.length, t.preferred_group_size);
   const drawn = drawGroups(
     teams.map((x) => x.id),
     sizes,
   );
 
-  for (const group of drawn) {
-    await admin
-      .from("team")
-      .update({ group_label: group.label })
-      .in("id", group.teamIds);
-  }
-
   const schedule = buildGroupSchedule(drawn, t.rink_count);
+  const assignments = drawn.flatMap((group) =>
+    group.teamIds.map((id) => ({ id, group_label: group.label })),
+  );
   const rows = schedule.map((f) => ({
-    tournament_id: t.id,
-    stage: "group",
     group_label: f.groupLabel,
     round: f.round,
     rink: f.rink,
@@ -306,14 +297,21 @@ export async function generateSchedule(
     team_a_id: f.teamA,
     team_b_id: f.teamB,
   }));
-  const { error: fErr } = await admin.from("fixture").insert(rows);
-  if (fErr) {
-    // Undo the claim so it can be retried cleanly.
-    await admin.from("tournament").update({ status: "setup" }).eq("id", t.id);
-    return { error: `Could not save the schedule: ${fErr.message}` };
+  const { error: drawError } = await admin.rpc("apply_tournament_draw", {
+    p_tournament_id: t.id,
+    p_assignments: assignments,
+    p_fixtures: rows,
+  });
+  if (drawError) {
+    if (/draw_already_live|fixtures_already_exist/.test(drawError.message)) {
+      redirect("/schedule");
+    }
+    return {
+      error: `The draw was not saved, so nothing changed. Try again (${drawError.message}).`,
+    };
   }
 
-  await resolveKnockout(admin, t.id);
+  const knockout = await resolveKnockout(admin, t.id);
 
   // Photo-bomb: fixed partner for each player — mutual, never yourself, never
   // your own team-mate.
@@ -325,7 +323,7 @@ export async function generateSchedule(
     const pairs = assignPhotoPartners(
       photoPlayers.map((p) => ({ id: p.id, teamId: p.team_id })),
     );
-    await Promise.all(
+    const photoResults = await Promise.all(
       [...pairs.entries()].map(([id, partnerId]) =>
         admin
           .from("player")
@@ -333,8 +331,20 @@ export async function generateSchedule(
           .eq("id", id),
       ),
     );
+    const photoFailures = photoResults.filter((result) => result.error);
+    if (photoFailures.length > 0) {
+      console.error(
+        `Could not assign ${photoFailures.length} photo partner(s)`,
+        photoFailures.map((result) => result.error?.message),
+      );
+    }
   }
 
+  if (knockout.error) {
+    return {
+      error: `The group schedule is live, but the knockout needs attention: ${knockout.error}`,
+    };
+  }
   redirect("/schedule");
 }
 
@@ -355,7 +365,10 @@ export async function saveEvent(
     venue_name: String(fd.get("venueName") ?? "").trim() || null,
     venue_address: String(fd.get("venueAddress") ?? "").trim() || null,
     venue_phone: String(fd.get("venuePhone") ?? "").trim() || null,
-    details: String(fd.get("details") ?? "").trim() || null,
+    details:
+      String(fd.get("details") ?? "")
+        .replace(/\r\n?/g, "\n")
+        .trim() || null,
     photo_album_url: String(fd.get("photoAlbumUrl") ?? "").trim() || null,
     updated_at: new Date().toISOString(),
   });
@@ -456,9 +469,14 @@ export async function removeHelper(
   return {};
 }
 
-export async function refreshKnockout(): Promise<void> {
+export async function refreshKnockout(
+  _prev: GenerateState,
+  _fd: FormData,
+): Promise<GenerateState> {
+  void _prev;
+  void _fd;
   const ownerId = await currentOwnerId();
-  if (!ownerId) return;
+  if (!ownerId) return { error: "Only the owner can refresh the knockout." };
   const admin = createAdminClient();
   const { data: t } = await admin
     .from("tournament")
@@ -466,42 +484,80 @@ export async function refreshKnockout(): Promise<void> {
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
-  if (!t) return;
-  await resolveKnockout(admin, t.id);
+  if (!t) return { error: "No active tournament." };
+  const result = await resolveKnockout(admin, t.id);
+  if (result.error) return result;
   revalidatePath("/schedule");
-  redirect("/schedule");
+  revalidatePath("/");
+  return { done: true };
 }
 
 // ---------- reset: delete the tournament, its teams, logins and schedule ----------
 
 export async function resetTournament(
   _prev: GenerateState,
-  _fd: FormData,
+  fd: FormData,
 ): Promise<GenerateState> {
+  void _prev;
   const ownerId = await currentOwnerId();
   if (!ownerId) return { error: "Only the owner can reset the tournament." };
+  if (String(fd.get("confirmation") ?? "") !== "DELETE TEST ROSTER") {
+    return { error: "Type DELETE TEST ROSTER exactly to confirm." };
+  }
+  const tournamentId = String(fd.get("tournamentId") ?? "");
+  if (!tournamentId) return { error: "This reset page is stale. Refresh it." };
 
   const admin = createAdminClient();
   const { data: t } = await admin
     .from("tournament")
-    .select("id")
+    .select("id, status")
+    .eq("id", tournamentId)
     .neq("status", "archived")
-    .limit(1)
     .maybeSingle();
-  if (!t) redirect("/setup");
+  if (!t) {
+    return {
+      error:
+        "That test tournament no longer exists. Nothing was deleted; refresh the page.",
+    };
+  }
 
   // Grab the player accounts before the tournament (and its player rows) go.
-  const { data: players } = await admin
+  const { data: players, error: playersError } = await admin
     .from("player")
     .select("profile_id")
     .eq("tournament_id", t.id);
+  if (playersError) {
+    return {
+      error:
+        "Could not safely load every test login, so nothing was deleted. Try again.",
+    };
+  }
 
   // Deleting the tournament cascades its teams, players and fixtures.
-  await admin.from("tournament").delete().eq("id", t.id);
+  const { data: removed, error: deleteError } = await admin
+    .from("tournament")
+    .delete()
+    .eq("id", t.id)
+    .eq("status", t.status)
+    .select("id");
+  if (deleteError || !removed || removed.length === 0) {
+    return { error: "The tournament was not deleted. Refresh and try again." };
+  }
 
   // Delete each player's auth account (frees the username); keep the owner.
+  let failedLogins = 0;
   for (const p of players ?? []) {
-    if (p.profile_id !== ownerId) await deleteAuthUser(p.profile_id);
+    if (
+      p.profile_id !== ownerId &&
+      !(await deleteAuthUser(p.profile_id))
+    ) {
+      failedLogins++;
+    }
+  }
+  if (failedLogins > 0) {
+    return {
+      error: `The test tournament was deleted, but ${failedLogins} old login${failedLogins === 1 ? "" : "s"} could not be removed. Refresh, then ask for help before reusing those usernames.`,
+    };
   }
 
   redirect("/setup");

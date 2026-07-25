@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AWARD_BY_KEY } from "@/lib/domain/awards";
+import {
+  isOrganiserNominee,
+  ORGANISER_VOTE_MESSAGE,
+} from "@/lib/domain/voting";
 
 export type VoteState = { error?: string };
 
@@ -60,7 +64,7 @@ export async function castVote(
   } else {
     const { data: player } = await admin
       .from("player")
-      .select("id, nationality")
+      .select("id, nationality, profile_id")
       .eq("id", targetId)
       .eq("tournament_id", tournament.id)
       .maybeSingle();
@@ -68,23 +72,40 @@ export async function castVote(
     if (voterPlayer && voterPlayer.id === targetId) {
       return { error: "You can't vote for yourself." };
     }
+    const { data: targetProfile } = await admin
+      .from("profile")
+      .select("is_owner, is_admin")
+      .eq("id", player.profile_id)
+      .maybeSingle();
+    if (isOrganiserNominee(targetProfile)) {
+      return { error: ORGANISER_VOTE_MESSAGE };
+    }
     if (award.nationality && player.nationality !== award.nationality) {
       return { error: "That player isn't eligible for this award." };
     }
   }
 
   // Toggle: remove if already picked; otherwise add if under the limit.
-  const { data: existing } = await admin
+  const { data: existing, error: existingError } = await admin
     .from("award_vote")
     .select("id, target_id")
     .eq("tournament_id", tournament.id)
     .eq("award_key", awardKey)
     .eq("voter_id", user.id);
+  if (existingError) {
+    return { error: "Could not load your ballot — check your signal and try again." };
+  }
   const rows = existing ?? [];
   const mine = rows.find((r) => r.target_id === targetId);
 
   if (mine) {
-    await admin.from("award_vote").delete().eq("id", mine.id);
+    const { error } = await admin.from("award_vote").delete().eq("id", mine.id);
+    if (error) {
+      if (error.message?.includes("voting_closed")) {
+        return { error: "Voting has closed." };
+      }
+      return { error: "Could not change your vote — please try again." };
+    }
   } else if (rows.length >= award.votes) {
     return {
       error: `You've used all ${award.votes} votes for ${award.title} — tap one of your picks to change it.`,
@@ -100,9 +121,15 @@ export async function castVote(
     // 23505 = duplicate target from a racing identical tap; the vote is already
     // recorded, so treat it as success. The DB trigger enforces the 2-vote cap.
     if (error && error.code !== "23505") {
+      if (error.message?.includes("voting_closed")) {
+        return { error: "Voting has closed." };
+      }
+      if (error.message?.includes("admin_nominee_not_eligible")) {
+        return { error: ORGANISER_VOTE_MESSAGE };
+      }
       if (error.message?.includes("vote_limit_reached")) {
         return {
-          error: `You've used both votes for ${award.title} — tap one of your picks to change it.`,
+          error: `You've used all ${award.votes} votes for ${award.title} — tap one of your picks to change it.`,
         };
       }
       return { error: "Could not save your vote — please try again." };
@@ -110,19 +137,25 @@ export async function castVote(
   }
 
   revalidatePath("/awards");
+  revalidatePath("/awards/results");
   return {};
 }
 
 // Owner/helper control: open, close, or reset voting.
-export async function setVotingStatus(fd: FormData): Promise<void> {
+export async function setVotingStatus(
+  _prev: VoteState,
+  fd: FormData,
+): Promise<VoteState> {
   const status = String(fd.get("status") ?? "");
-  if (!["pending", "open", "closed"].includes(status)) return;
+  if (!["pending", "open", "closed"].includes(status)) {
+    return { error: "Unknown voting status." };
+  }
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return;
+  if (!user) return { error: "Please log in again." };
 
   const admin = createAdminClient();
   const { data: prof } = await admin
@@ -130,7 +163,9 @@ export async function setVotingStatus(fd: FormData): Promise<void> {
     .select("is_owner, is_admin")
     .eq("id", user.id)
     .maybeSingle();
-  if (!prof?.is_owner && !prof?.is_admin) return;
+  if (!prof?.is_owner && !prof?.is_admin) {
+    return { error: "Only an organiser can change voting." };
+  }
 
   const { data: tournament } = await admin
     .from("tournament")
@@ -138,11 +173,19 @@ export async function setVotingStatus(fd: FormData): Promise<void> {
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
-  if (!tournament) return;
+  if (!tournament) return { error: "No active tournament." };
 
-  await admin
+  const { data: updated, error } = await admin
     .from("tournament")
     .update({ voting_status: status })
-    .eq("id", tournament.id);
+    .eq("id", tournament.id)
+    .select("id");
+  if (error || !updated || updated.length === 0) {
+    return {
+      error: "Could not change voting — check your signal and try again.",
+    };
+  }
   revalidatePath("/awards");
+  revalidatePath("/awards/results");
+  return {};
 }

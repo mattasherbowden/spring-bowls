@@ -5,38 +5,26 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fixtureResult } from "@/lib/domain/fixture";
+import { validateScoreEntry } from "@/lib/domain/score-entry";
 import { resolveKnockout } from "@/lib/server/knockout";
-import type { EndScore } from "@/lib/domain/types";
 
 export type ScoreState = { error?: string };
 
 const OPEN = ["scheduled", "live"];
-
-function parseEnds(raw: string): EndScore[] {
-  const parsed = JSON.parse(raw) as Array<{
-    shotsA?: unknown;
-    shotsB?: unknown;
-    isDecider?: unknown;
-  }>;
-  return parsed.map((e) => ({
-    shotsA: Math.max(0, Math.floor(Number(e.shotsA) || 0)),
-    shotsB: Math.max(0, Math.floor(Number(e.shotsB) || 0)),
-    isDecider: Boolean(e.isDecider),
-  }));
-}
+const DONE = ["completed", "walkover"];
 
 export async function submitScore(
   _prev: ScoreState,
   fd: FormData,
 ): Promise<ScoreState> {
   const fixtureId = String(fd.get("fixtureId") ?? "");
-  let ends: EndScore[];
+  let rawEnds: unknown;
   try {
-    ends = parseEnds(String(fd.get("ends") ?? "[]"));
+    rawEnds = JSON.parse(String(fd.get("ends") ?? "[]"));
   } catch {
     return { error: "Could not read the scores." };
   }
-  if (!fixtureId || ends.length === 0) {
+  if (!fixtureId) {
     return { error: "Enter the scores for each end." };
   }
 
@@ -58,6 +46,18 @@ export async function submitScore(
   if (!OPEN.includes(fixture.status)) {
     return { error: "This game's score is already in." };
   }
+
+  const { data: tournament, error: tournamentError } = await admin
+    .from("tournament")
+    .select("ends_per_game")
+    .eq("id", fixture.tournament_id)
+    .maybeSingle();
+  if (tournamentError || !tournament) {
+    return { error: "Could not load the scoring rules. Refresh and try again." };
+  }
+  const validated = validateScoreEntry(rawEnds, tournament.ends_per_game);
+  if ("error" in validated) return { error: validated.error };
+  const ends = validated.ends;
 
   // Authorize: a member of one of the two teams, or an admin/owner.
   const [{ data: me }, { data: prof }] = await Promise.all([
@@ -99,7 +99,7 @@ export async function submitScore(
   }
 
   // Atomically lock: only if still open (first submit wins — threat T-02).
-  const { data: locked } = await admin
+  const { data: locked, error: lockError } = await admin
     .from("fixture")
     .update({
       status: "completed",
@@ -113,12 +113,18 @@ export async function submitScore(
     .eq("id", fixtureId)
     .in("status", OPEN)
     .select("id");
+  if (lockError) {
+    return { error: "Could not save the score — check your signal and try again." };
+  }
   if (!locked || locked.length === 0) {
     return { error: "Someone just entered this score first." };
   }
 
-  await admin.from("fixture_end").delete().eq("fixture_id", fixtureId);
-  await admin.from("fixture_end").insert(
+  const { error: endDeleteError } = await admin
+    .from("fixture_end")
+    .delete()
+    .eq("fixture_id", fixtureId);
+  const { error: endInsertError } = await admin.from("fixture_end").insert(
     ends.map((e, i) => ({
       fixture_id: fixtureId,
       end_number: i + 1,
@@ -127,9 +133,22 @@ export async function submitScore(
       shots_b: e.shotsB,
     })),
   );
+  if (endDeleteError || endInsertError) {
+    console.error("Score saved but fixture ends failed", {
+      fixtureId,
+      deleteError: endDeleteError?.message,
+      insertError: endInsertError?.message,
+    });
+  }
 
   // Fill in any knockout slots this result now decides.
-  await resolveKnockout(admin, fixture.tournament_id);
+  const knockout = await resolveKnockout(admin, fixture.tournament_id);
+  if (knockout.error) {
+    console.error("Score saved but knockout refresh failed", {
+      fixtureId,
+      error: knockout.error,
+    });
+  }
 
   revalidatePath("/schedule");
   revalidatePath("/");
@@ -148,11 +167,14 @@ export async function unlockFixture(
   if (!user) return { error: "Please log in again." };
 
   const admin = createAdminClient();
-  const { data: fixture } = await admin
+  const { data: fixture, error: fixtureError } = await admin
     .from("fixture")
-    .select("tournament_id")
+    .select("tournament_id, stage, round, status")
     .eq("id", fixtureId)
     .maybeSingle();
+  if (fixtureError) {
+    return { error: "Could not load the game. Refresh and try again." };
+  }
   if (!fixture) return { error: "Game not found." };
 
   const { data: me } = await admin
@@ -170,7 +192,34 @@ export async function unlockFixture(
     return { error: "Only an admin can unlock a score." };
   }
 
-  await admin
+  // Once a downstream knockout result exists, changing an earlier result would
+  // make the already-played bracket internally inconsistent. Before knockout
+  // play starts, group corrections are safe and the scheduled slots re-seed.
+  const downstream = admin
+    .from("fixture")
+    .select("id", { count: "exact", head: true })
+    .eq("tournament_id", fixture.tournament_id)
+    .eq("stage", "knockout")
+    .in("status", DONE);
+  const downstreamResult =
+    fixture.stage === "group"
+      ? await downstream
+      : await downstream.gt("round", fixture.round ?? 0);
+  if (downstreamResult.error) {
+    return {
+      error: "Could not check the knockout before resetting. Refresh and try again.",
+    };
+  }
+  if ((downstreamResult.count ?? 0) > 0) {
+    return {
+      error:
+        fixture.stage === "group"
+          ? "Group results are locked because the knockout has started."
+          : "This result is locked because a later knockout round has been played.",
+    };
+  }
+
+  const { data: reset, error: resetError } = await admin
     .from("fixture")
     .update({
       status: "scheduled",
@@ -181,13 +230,31 @@ export async function unlockFixture(
       locked_by: null,
       entered_by: null,
     })
-    .eq("id", fixtureId);
-  await admin.from("fixture_end").delete().eq("fixture_id", fixtureId);
+    .eq("id", fixtureId)
+    .in("status", DONE)
+    .select("id");
+  if (resetError) {
+    return { error: "Could not reset the score — check your signal and try again." };
+  }
+  if (!reset || reset.length === 0) {
+    return { error: "This score was already reset or changed in another tab." };
+  }
+  const { error: deleteError } = await admin
+    .from("fixture_end")
+    .delete()
+    .eq("fixture_id", fixtureId);
+  if (deleteError) {
+    return {
+      error: "Score reset, but its end-by-end detail could not be cleared.",
+    };
+  }
 
   // Re-resolve the bracket so any downstream knockout slots reflect the reset.
-  await resolveKnockout(admin, fixture.tournament_id);
+  const knockout = await resolveKnockout(admin, fixture.tournament_id);
+  if (knockout.error) return { error: `Score reset. ${knockout.error}` };
 
   revalidatePath("/schedule");
+  revalidatePath("/");
   redirect(`/fixture/${fixtureId}`);
 }
 
@@ -197,7 +264,10 @@ const WALKOVER_LOSS = 0;
 // Admin/owner records a walkover (a no-show or withdrawal): the present team
 // wins a default 10–0. Recomputes the bracket afterwards so a no-show can't
 // block the knockout from resolving.
-export async function walkoverFixture(fd: FormData): Promise<void> {
+export async function walkoverFixture(
+  _prev: ScoreState,
+  fd: FormData,
+): Promise<ScoreState> {
   const fixtureId = String(fd.get("fixtureId") ?? "");
   const winnerTeamId = String(fd.get("winnerTeamId") ?? "");
 
@@ -205,15 +275,18 @@ export async function walkoverFixture(fd: FormData): Promise<void> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return;
+  if (!user) return { error: "Please log in again." };
 
   const admin = createAdminClient();
   const { data: fixture } = await admin
     .from("fixture")
-    .select("tournament_id, team_a_id, team_b_id")
+    .select("tournament_id, team_a_id, team_b_id, status")
     .eq("id", fixtureId)
     .maybeSingle();
-  if (!fixture) return;
+  if (!fixture) return { error: "Game not found." };
+  if (!OPEN.includes(fixture.status)) {
+    return { error: "This game's score is already in." };
+  }
 
   const { data: prof } = await admin
     .from("profile")
@@ -226,7 +299,9 @@ export async function walkoverFixture(fd: FormData): Promise<void> {
     .eq("tournament_id", fixture.tournament_id)
     .eq("profile_id", user.id)
     .maybeSingle();
-  if (!prof?.is_owner && !prof?.is_admin && me?.role !== "admin") return;
+  if (!prof?.is_owner && !prof?.is_admin && me?.role !== "admin") {
+    return { error: "Only an admin can record a walkover." };
+  }
 
   // Winner must be one of the two known teams.
   if (
@@ -234,11 +309,11 @@ export async function walkoverFixture(fd: FormData): Promise<void> {
     !fixture.team_b_id ||
     (winnerTeamId !== fixture.team_a_id && winnerTeamId !== fixture.team_b_id)
   ) {
-    return;
+    return { error: "Choose one of the teams in this game." };
   }
   const aWon = winnerTeamId === fixture.team_a_id;
 
-  await admin
+  const { data: locked, error: lockError } = await admin
     .from("fixture")
     .update({
       status: "walkover",
@@ -249,9 +324,26 @@ export async function walkoverFixture(fd: FormData): Promise<void> {
       locked_by: user.id,
       entered_by: "walkover",
     })
-    .eq("id", fixtureId);
-  await admin.from("fixture_end").delete().eq("fixture_id", fixtureId);
-  await resolveKnockout(admin, fixture.tournament_id);
+    .eq("id", fixtureId)
+    .in("status", OPEN)
+    .select("id");
+  if (lockError) {
+    return {
+      error: "Could not record the walkover — check your signal and try again.",
+    };
+  }
+  if (!locked || locked.length === 0) {
+    return { error: "Someone entered a score for this game first." };
+  }
+  const { error: deleteError } = await admin
+    .from("fixture_end")
+    .delete()
+    .eq("fixture_id", fixtureId);
+  if (deleteError) {
+    return { error: "Walkover saved, but old end-by-end detail could not be cleared." };
+  }
+  const knockout = await resolveKnockout(admin, fixture.tournament_id);
+  if (knockout.error) return { error: `Walkover saved. ${knockout.error}` };
 
   revalidatePath("/schedule");
   revalidatePath("/");

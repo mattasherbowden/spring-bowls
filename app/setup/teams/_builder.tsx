@@ -20,10 +20,12 @@ export function TeamBuilder({
   teamSize,
   plannedTeams,
   teams,
+  rosterLocked,
 }: {
   teamSize: number;
   plannedTeams: number;
   teams: TeamRow[];
+  rosterLocked: boolean;
 }) {
   const [state, action, pending] = useActionState(addTeam, {} as AddTeamState);
   const [addExtra, setAddExtra] = useState(false);
@@ -109,7 +111,17 @@ export function TeamBuilder({
         </div>
       )}
 
-      {!atLimit || addExtra ? (
+      {rosterLocked ? (
+        <div className="rounded-2xl bg-amber-50 p-5 text-center ring-1 ring-amber-200">
+          <p className="text-sm font-semibold text-amber-900">
+            Roster locked — the draw is live
+          </p>
+          <p className="mt-1 text-xs text-amber-800">
+            Adding a team now would leave them without fixtures. Use a walkover
+            if someone cannot play.
+          </p>
+        </div>
+      ) : !atLimit || addExtra ? (
         <form
           action={action}
           className="space-y-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5"

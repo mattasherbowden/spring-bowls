@@ -5,7 +5,7 @@ A small web app for running a one-day lawn-bowls tournament — the 7th **Spring
 Everyone gets a username + password, sees their next fixture and rink, enters scores, checks the group tables and bracket, and votes for the fun awards. One admin (the host) sets the whole thing up and can fix anything on the day.
 
 - **Event date:** Saturday 1 August 2026
-- **Status:** requirements + design (no app code yet)
+- **Status:** live app, event-day hardened and ready for final deployment checks
 - **This is a personal project** — unrelated to any employer.
 
 ## Tech
@@ -26,6 +26,7 @@ Everyone gets a username + password, sees their next fixture and rink, enters sc
 | [test-strategy.md](docs/test-strategy.md) | How we test, and the rules that stop tests from cheating |
 | [edge-cases.md](docs/edge-cases.md) | Living log of edge cases + open decisions to resolve in user testing |
 | [decisions.md](docs/decisions.md) | Short record of key design decisions and why |
+| [day-of-runbook.md](docs/day-of-runbook.md) | Final checks, normal operation, and paper fallback |
 
 ## Running it (once the app exists)
 

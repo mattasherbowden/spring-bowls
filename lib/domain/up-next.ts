@@ -4,6 +4,7 @@
 // tested away from the page that renders it.
 
 export type UpNextStatus = "tbd" | "waiting" | "live" | "unknown";
+export type UpNextBlocker = "rink" | "team" | null;
 
 // The minimal shape of a fixture on the board that this logic needs.
 export type RinkFixture = {
@@ -17,11 +18,13 @@ export type RinkFixture = {
 
 export type UpNextInfo = {
   status: UpNextStatus;
-  // The game directly ahead of you on your rink that's still to be played, if
-  // any — used to tell you who to watch.
+  // The most useful game to watch while waiting: normally the nearest game on
+  // the assigned rink, or an earlier game involving one of this fixture's
+  // teams on another rink.
   aheadGame: RinkFixture | null;
   // How many still-to-play games are ahead of you on your rink.
   aheadCount: number;
+  blocker: UpNextBlocker;
 };
 
 // A fixture counts as "still to be played" unless it's completed or a walkover.
@@ -30,11 +33,18 @@ export function isOpenStatus(status: string): boolean {
 }
 
 export function upNextInfo(
-  upNext: { id: string; rink: number | null; order_index: number },
+  upNext: {
+    id: string;
+    rink: number | null;
+    order_index: number;
+    team_a_id?: string | null;
+    team_b_id?: string | null;
+  },
   allFixtures: RinkFixture[],
   opponentKnown: boolean,
 ): UpNextInfo {
-  let aheadGame: RinkFixture | null = null;
+  let rinkBlocker: RinkFixture | null = null;
+  let teamBlocker: RinkFixture | null = null;
   let aheadCount = 0;
 
   if (upNext.rink != null) {
@@ -49,16 +59,41 @@ export function upNextInfo(
       // Nearest game ahead first (highest order_index below yours).
       .sort((a, b) => b.order_index - a.order_index);
     aheadCount = ahead.length;
-    aheadGame = ahead[0] ?? null;
+    rinkBlocker = ahead[0] ?? null;
+
+    const teams = new Set(
+      [upNext.team_a_id, upNext.team_b_id].filter(
+        (id): id is string => id != null,
+      ),
+    );
+    teamBlocker =
+      allFixtures
+        .filter(
+          (f) =>
+            f.id !== upNext.id &&
+            f.order_index < upNext.order_index &&
+            isOpenStatus(f.status) &&
+            (teams.has(f.team_a_id ?? "") || teams.has(f.team_b_id ?? "")),
+        )
+        // Prefer the most recent earlier commitment.
+        .sort((a, b) => b.order_index - a.order_index)[0] ?? null;
   }
 
+  // A busy assigned rink is the clearest explanation when both constraints
+  // apply. Once it clears, a cross-rink team blocker (if any) takes over.
+  const blocker: UpNextBlocker = rinkBlocker
+    ? "rink"
+    : teamBlocker
+      ? "team"
+      : null;
+  const aheadGame = rinkBlocker ?? teamBlocker;
   const status: UpNextStatus = !opponentKnown
     ? "tbd"
-    : aheadGame
+    : blocker
       ? "waiting"
       : upNext.rink != null
         ? "live"
         : "unknown";
 
-  return { status, aheadGame, aheadCount };
+  return { status, aheadGame, aheadCount, blocker };
 }

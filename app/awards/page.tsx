@@ -3,8 +3,9 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AWARDS, type AwardDef } from "@/lib/domain/awards";
+import { isOrganiserNominee } from "@/lib/domain/voting";
 import { AwardCard } from "./_card";
-import { setVotingStatus } from "./actions";
+import { VotingStatusButton } from "./_status-button";
 import { HomeButton } from "../_components/home-button";
 import { SBMark } from "../_components/sb-mark";
 
@@ -16,6 +17,7 @@ type PlayerRow = {
   team_id: string | null;
 };
 type TeamRow = { id: string; name: string | null; players: { display_name: string }[] };
+type ProfileRow = { id: string; is_owner: boolean; is_admin: boolean };
 
 function flag(nat: string | null): string {
   return nat === "brit" ? "🇬🇧 " : nat === "kiwi" ? "🇳🇿 " : "";
@@ -79,6 +81,7 @@ export default async function AwardsPage() {
     { data: allVotes },
     { data: myVotes },
     { data: koData },
+    { data: organiserProfilesData },
   ] = await Promise.all([
     admin
       .from("player")
@@ -102,10 +105,20 @@ export default async function AwardsPage() {
       .select("round, status, winner_team_id")
       .eq("tournament_id", tournament.id)
       .eq("stage", "knockout"),
+    admin
+      .from("profile")
+      .select("id, is_owner, is_admin")
+      .or("is_owner.eq.true,is_admin.eq.true"),
   ]);
 
   const players = (playersData ?? []) as PlayerRow[];
   const teams = (teamsData ?? []) as TeamRow[];
+  const organiserProfiles = new Map(
+    ((organiserProfilesData ?? []) as ProfileRow[]).map((profile) => [
+      profile.id,
+      profile,
+    ]),
+  );
   const teamLabel = (t: TeamRow) =>
     t.name ?? t.players.map((p) => p.display_name).join(" & ");
   const teamLabelById = (id: string) => {
@@ -134,7 +147,8 @@ export default async function AwardsPage() {
     myPicks.set(v.award_key, arr);
   }
 
-  // Nominees for VOTING exclude the voter's own team / self.
+  // Nominees for VOTING exclude the voter's own team/self. Organisers remain
+  // visible for individual awards but are marked as deliberately unselectable.
   const nomineesFor = (award: AwardDef) => {
     if (award.kind === "team") {
       return teams
@@ -152,6 +166,7 @@ export default async function AwardsPage() {
         id: p.id,
         label: `${flag(p.nationality)}${p.display_name}`,
         count: countOf(award.key, p.id),
+        organiser: isOrganiserNominee(organiserProfiles.get(p.profile_id)),
       }));
   };
 
@@ -160,6 +175,7 @@ export default async function AwardsPage() {
     const candidates =
       award.kind === "team"
         ? teams.map((t) => ({
+            id: t.id,
             label: teamLabel(t),
             count: countOf(award.key, t.id),
           }))
@@ -168,6 +184,7 @@ export default async function AwardsPage() {
               (p) => !award.nationality || p.nationality === award.nationality,
             )
             .map((p) => ({
+              id: p.id,
               label: `${flag(p.nationality)}${p.display_name}`,
               count: countOf(award.key, p.id),
             }));
@@ -188,24 +205,6 @@ export default async function AwardsPage() {
     ? teamLabelById(finalFx.winner_team_id)
     : null;
 
-  const StatusButton = ({
-    to,
-    label,
-  }: {
-    to: "open" | "closed" | "pending";
-    label: string;
-  }) => (
-    <form action={setVotingStatus}>
-      <input type="hidden" name="status" value={to} />
-      <button
-        type="submit"
-        className="rounded-lg border border-black/10 px-3 py-1.5 text-sm font-medium hover:bg-black/[.03]"
-      >
-        {label}
-      </button>
-    </form>
-  );
-
   const adminBar = canManage && (
     <div className="mt-6 rounded-xl bg-white p-4 text-sm shadow-sm ring-1 ring-black/5">
       <p className="font-medium">
@@ -216,11 +215,18 @@ export default async function AwardsPage() {
         <span className="text-xs text-foreground/50">(you control this)</span>
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
-        {status !== "open" && <StatusButton to="open" label="Open voting" />}
-        {status === "open" && (
-          <StatusButton to="closed" label="Close voting & reveal winners" />
+        {status !== "open" && (
+          <VotingStatusButton to="open" label="Open voting" />
         )}
-        {status === "closed" && <StatusButton to="open" label="Re-open voting" />}
+        {status === "open" && (
+          <VotingStatusButton
+            to="closed"
+            label="Close voting & reveal winners"
+          />
+        )}
+        {status === "closed" && (
+          <VotingStatusButton to="open" label="Re-open voting" />
+        )}
       </div>
     </div>
   );
@@ -269,7 +275,7 @@ export default async function AwardsPage() {
                 ) : (
                   <p className="mt-1">
                     {winners.map((w) => (
-                      <span key={w.label} className="font-medium">
+                      <span key={w.id} className="font-medium">
                         {w.label}
                         {winners.length > 1 ? " " : ""}
                       </span>
@@ -297,7 +303,8 @@ export default async function AwardsPage() {
           <p className="text-4xl">🗳️</p>
           <p className="mt-2 font-medium">Voting hasn&apos;t opened yet</p>
           <p className="mt-1 text-sm text-foreground/60">
-            Check back later — you&apos;ll get two votes for each award.
+            Check back later — most awards give you two votes; Bowl of the Day
+            gives you five.
           </p>
         </div>
       </Frame>
@@ -309,8 +316,10 @@ export default async function AwardsPage() {
     <Frame>
       {adminBar}
       <p className="mt-6 text-sm text-foreground/60">
-        Two votes per award, to two different nominees. You can change them until
-        voting closes. You can&apos;t vote for yourself or your own team.
+        Two votes for most awards and five for Bowl of the Day, each to a
+        different nominee. You can change them until voting closes. You
+        can&apos;t vote for yourself, your own team, or an organiser for an
+        individual award.
       </p>
       <Link
         href="/awards/results"

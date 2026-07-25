@@ -39,6 +39,32 @@ describe("structure validity across every size", () => {
             ).toBe(true);
           }
 
+          // A valid set of pairings is not enough: its physical rink plan must
+          // never require one team in two places in the same time wave.
+          for (const rinkCount of [1, 2, 3, 4, 5, 6]) {
+            const physical = buildGroupSchedule(drawn, rinkCount);
+            const byWave = new Map<number, string[]>();
+            for (const fixture of physical) {
+              const wave = Math.floor(fixture.order / rinkCount);
+              const waveTeams = byWave.get(wave) ?? [];
+              waveTeams.push(fixture.teamA, fixture.teamB);
+              byWave.set(wave, waveTeams);
+            }
+            for (const waveTeams of byWave.values()) {
+              expect(new Set(waveTeams).size).toBe(waveTeams.length);
+            }
+            for (const teamId of teamIds) {
+              const rounds = physical
+                .filter(
+                  (fixture) =>
+                    fixture.teamA === teamId || fixture.teamB === teamId,
+                )
+                .sort((a, b) => a.order - b.order)
+                .map((fixture) => fixture.round);
+              expect(rounds).toEqual([...rounds].sort((a, b) => a - b));
+            }
+          }
+
           // The knockout is coherent: at least one qualifier, never more than
           // the field, and Q entrants play Q-1 games (0 if there's no bracket).
           const plan = planTournament({

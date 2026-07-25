@@ -6,6 +6,7 @@ import { CreateOwnerForm } from "./_components/create-owner-form";
 import { Countdown } from "./_components/countdown";
 import { logout } from "./actions";
 import { OrganiserLinks } from "./_components/organiser-links";
+import { LiveRefresh } from "./_components/live-refresh";
 import { upNextInfo } from "@/lib/domain/up-next";
 import { computeStandings } from "@/lib/domain/standings";
 import type { Fixture } from "@/lib/domain/types";
@@ -90,8 +91,8 @@ function randomGreeting(): string {
   return GREETINGS[Math.floor(Math.random() * GREETINGS.length)];
 }
 
-// Shown on the "Up next" tile. WAITING = the game ahead of you on your rink is
-// still on, so relax. LIVE = your rink is clear, get out there.
+// Shown on the "Up next" tile. WAITING = the rink is occupied or one of the
+// teams is finishing an earlier game. LIVE = both the rink and teams are clear.
 const WAITING_LINES = [
   "Grab a beer — the game before you is still on 🍺",
   "No rush — the rink's still busy. Time for a cheeky pint 🍺",
@@ -116,6 +117,7 @@ function EventInfo({ ev }: { ev: EventInfoData }) {
   // Split the free-text details into blank-line-separated sections so each reads
   // as its own card instead of one pasted-message blob.
   const sections = (ev.details ?? "")
+    .replace(/\r/g, "")
     .split(/\n\s*\n/)
     .map((b) => b.trim())
     .filter(Boolean)
@@ -432,6 +434,7 @@ export default async function Home() {
           </div>
         )}
       </section>
+      <LogoutButton />
     </Shell>
   );
 }
@@ -509,7 +512,7 @@ async function PlayerHome({
   const completed: Fixture[] = (groupFixturesData ?? [])
     .filter(
       (f) =>
-        f.status === "completed" &&
+        (f.status === "completed" || f.status === "walkover") &&
         f.team_a_id &&
         f.team_b_id &&
         f.shots_a != null &&
@@ -529,6 +532,12 @@ async function PlayerHome({
     completed,
   );
   const myRank = table.find((r) => r.teamId === teamId)?.rank ?? null;
+  const expectedGroupGames =
+    (groupTeams.length * Math.max(0, groupTeams.length - 1)) / 2;
+  const groupFinished =
+    expectedGroupGames > 0 && completed.length >= expectedGroupGames;
+  const eliminated =
+    groupFinished && myRank != null && myRank > advance;
 
   const isDone = (f: FixtureLite) =>
     f.status === "completed" || f.status === "walkover";
@@ -592,15 +601,18 @@ async function PlayerHome({
       >
         See the draw
       </Link>
+      <div className="mt-2">
+        <LiveRefresh />
+      </div>
 
       {upNext ? (
         (() => {
           const v = view(upNext);
           const ready = !!v.oppId;
-          // Which state is the tile in? waiting = a game ahead of you on your
-          // rink is still on; live = your rink is clear so you're up; tbd =
-          // opponent not decided; unknown = ready but no rink assigned yet.
-          const { status, aheadGame, aheadCount } = upNextInfo(
+          // Which state is the tile in? waiting = the rink or a team is busy;
+          // live = both are clear; tbd = opponent not decided; unknown = ready
+          // but no rink assigned yet.
+          const { status, aheadGame, aheadCount, blocker } = upNextInfo(
             upNext,
             allFixtures,
             ready,
@@ -665,16 +677,33 @@ async function PlayerHome({
                     {pick(WAITING_LINES)}
                   </p>
                   <p className="mt-1 text-sm text-amber-800">
-                    Rink {upNext.rink} is still on with{" "}
-                    <span className="font-semibold">
-                      {nameOf(aheadGame.team_a_id)} v{" "}
-                      {nameOf(aheadGame.team_b_id)}
-                    </span>
-                    {aheadCount > 1 && (
-                      <span className="text-amber-700">
-                        {" · "}
-                        {aheadCount} games ahead of you
-                      </span>
+                    {blocker === "team" ? (
+                      <>
+                        Waiting for{" "}
+                        <span className="font-semibold">
+                          {nameOf(
+                            aheadGame.team_a_id === upNext.team_a_id ||
+                              aheadGame.team_a_id === upNext.team_b_id
+                              ? aheadGame.team_a_id
+                              : aheadGame.team_b_id,
+                          )}
+                        </span>{" "}
+                        to finish on Rink {aheadGame.rink ?? "TBC"}
+                      </>
+                    ) : (
+                      <>
+                        Rink {upNext.rink} is still on with{" "}
+                        <span className="font-semibold">
+                          {nameOf(aheadGame.team_a_id)} v{" "}
+                          {nameOf(aheadGame.team_b_id)}
+                        </span>
+                        {aheadCount > 1 && (
+                          <span className="text-amber-700">
+                            {" · "}
+                            {aheadCount} games ahead of you
+                          </span>
+                        )}
+                      </>
                     )}
                   </p>
                 </div>
@@ -723,7 +752,9 @@ async function PlayerHome({
             .
           </p>
           <p className="mt-1 text-sm text-foreground/60">
-            Your knockout game will appear here as soon as the groups finish.
+            {eliminated && myRank != null
+              ? `That's your bowling done for the day — you finished ${ordinal(myRank)} in Group ${groupLabel}. Enjoy the knockout and the ceremony!`
+              : "Your knockout game will appear here as soon as the groups finish."}
           </p>
         </div>
       )}

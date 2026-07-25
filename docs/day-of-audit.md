@@ -9,6 +9,27 @@ Findings from a multi-agent audit (2026-07-25) focused on two risks: **~40 guest
 - Migrations live in `supabase/migrations/` (next free number) and are applied with `mise exec -- node scripts/db.mjs <file>`.
 - Priorities: **P1** = could break the event · **P2** = annoying/risky on the day · **P3** = low impact.
 
+## Implementation update — 25 July 2026
+
+The event-day hardening pass completed all five P1 items and also fixed the
+previously-undetected standalone-helper RLS failure. It additionally addressed
+the most consequential P2/P3 items: explicit write feedback for score resets,
+walkovers, voting and Photo Bomb; guarded knockout writes; eliminated-player
+copy; CRLF/timezone handling; atomic voting closure; correct vote-limit copy;
+stable award keys/ties; automatic live refresh/offline feedback; and a tested
+day-of runbook. Migration `0018_day_of_hardening.sql` was applied and verified
+against the live Supabase project.
+
+A second draw-integrity pass found and repaired a physical scheduling defect:
+valid round-robin pairings could still assign one team to two rinks in the same
+time wave when a logical round contained more games than rinks. The scheduler
+now packs conflict-free waves, preserves each team’s round order, exposes a
+live organiser audit for both group and knockout draws, and property-tests the
+full 2–40 team / 1–6 rink configuration space. Existing live matchups, IDs and
+scores were preserved while rink/order values were repacked. Migration
+`0019_atomic_draw.sql` also makes initial group assignment + fixture creation +
+the setup-to-live transition one all-or-nothing database transaction.
+
 ---
 
 ## P1 — Could break the event

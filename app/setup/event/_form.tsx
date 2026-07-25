@@ -1,16 +1,10 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import { saveEvent, type EventState } from "../actions";
+import { isoToZonedInput, zonedInputToIso } from "@/lib/domain/date-time";
 
-// The stored value is a real instant (timestamptz). Convert it to the browser's
-// local wall-clock for the <input>, and back to an ISO instant on submit — so
-// the time the owner types is interpreted in their own timezone.
-function toLocalInput(iso: string): string {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-}
+const EVENT_TIME_ZONE = "Europe/London";
 
 const inputCls =
   "mt-1 w-full rounded-lg border border-black/10 px-3 py-2 text-base text-black outline-none focus:border-brand focus:ring-2 focus:ring-brand/30";
@@ -30,13 +24,12 @@ export function EventForm({
   details: string;
   albumUrl: string;
 }) {
-  const [dt, setDt] = useState("");
-  useEffect(() => {
-    if (eventAt) setDt(toLocalInput(eventAt));
-  }, [eventAt]);
+  const [dt, setDt] = useState(() =>
+    eventAt ? isoToZonedInput(eventAt, EVENT_TIME_ZONE) : "",
+  );
 
   const [state, action, pending] = useActionState(saveEvent, {} as EventState);
-  const iso = dt ? new Date(dt).toISOString() : "";
+  const iso = dt ? zonedInputToIso(dt, EVENT_TIME_ZONE) : "";
 
   return (
     <form
@@ -46,6 +39,9 @@ export function EventForm({
       <input type="hidden" name="eventAt" value={iso} />
       <label className="block">
         <span className="text-sm font-medium">Date and time</span>
+        <span className="mt-0.5 block text-xs text-foreground/50">
+          London time, wherever you edit it from.
+        </span>
         <input
           type="datetime-local"
           value={dt}

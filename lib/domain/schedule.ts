@@ -16,6 +16,72 @@ export interface ScheduledFixture {
   teamB: TeamId;
 }
 
+type Schedulable = {
+  teamA: TeamId;
+  teamB: TeamId;
+  round: number;
+};
+
+/**
+ * Pack games into real time waves. A wave has at most one game per rink and a
+ * team can appear at most once. Earlier rounds for each team are never skipped.
+ *
+ * `order` encodes the wave and rink: floor(order / rinks) is the time wave and
+ * order % rinks is the zero-based rink. Keeping this explicit is what stops a
+ * superficially valid per-rink list from double-booking a team elsewhere.
+ */
+export function packScheduleGames<T extends Schedulable>(
+  games: T[],
+  rinks: number,
+): Array<T & { rink: number; order: number }> {
+  const lanes = Math.max(1, Math.floor(rinks));
+  const remaining = [...games];
+  const packed: Array<T & { rink: number; order: number }> = [];
+  let wave = 0;
+
+  while (remaining.length > 0) {
+    const usedTeams = new Set<TeamId>();
+    let position = 0;
+
+    for (let index = 0; index < remaining.length && position < lanes; ) {
+      const game = remaining[index];
+      const conflicts =
+        usedTeams.has(game.teamA) || usedTeams.has(game.teamB);
+      const skipsEarlierRound = remaining.some(
+        (other) =>
+          other.round < game.round &&
+          (other.teamA === game.teamA ||
+            other.teamB === game.teamA ||
+            other.teamA === game.teamB ||
+            other.teamB === game.teamB),
+      );
+      if (conflicts || skipsEarlierRound) {
+        index++;
+        continue;
+      }
+
+      remaining.splice(index, 1);
+      usedTeams.add(game.teamA);
+      usedTeams.add(game.teamB);
+      packed.push({
+        ...game,
+        rink: position + 1,
+        order: wave * lanes + position,
+      });
+      position++;
+    }
+
+    // The globally earliest remaining round is always eligible, so this is a
+    // defensive invariant rather than an expected path.
+    if (position === 0) {
+      throw new Error("Could not build a conflict-free schedule wave");
+    }
+    wave++;
+  }
+
+  return packed;
+}
+
 function groupLabel(index: number): string {
   return String.fromCharCode(65 + index); // A, B, C, ...
 }
@@ -75,20 +141,19 @@ export function buildGroupSchedule(
     }
   }
 
-  const out: ScheduledFixture[] = [];
-  let order = 0;
-  for (const round of [...byRound.keys()].sort((a, b) => a - b)) {
-    byRound.get(round)!.forEach((game, idx) => {
-      out.push({
-        stage: "group",
-        groupLabel: game.groupLabel,
-        round,
-        rink: (idx % lanes) + 1,
-        order: order++,
-        teamA: game.teamA,
-        teamB: game.teamB,
-      });
-    });
-  }
-  return out;
+  const ordered = [...byRound.keys()]
+    .sort((a, b) => a - b)
+    .flatMap((round) =>
+      byRound.get(round)!.map((game) => ({ ...game, round })),
+    );
+
+  return packScheduleGames(ordered, lanes).map((game) => ({
+    stage: "group",
+    groupLabel: game.groupLabel,
+    round: game.round,
+    rink: game.rink,
+    order: game.order,
+    teamA: game.teamA,
+    teamB: game.teamB,
+  }));
 }
