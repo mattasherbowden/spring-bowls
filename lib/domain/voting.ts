@@ -1,4 +1,4 @@
-export const ORGANISER_VOTE_MESSAGE =
+export const OWNER_COOLEST_KIWI_MESSAGE =
   "That is kind but sorry, pick someone else — I made it so you can't vote for me.";
 
 export type NomineeProfile = {
@@ -27,9 +27,10 @@ export function isAwardVotingOpen(
     );
 }
 
-/** Owners and helpers may vote, but cannot be individual-award nominees. */
-export function isOrganiserNominee(
+/** The owner opted out of Coolest Kiwi only; all other eligibility is normal. */
+export function isOwnerExcludedFromAward(
   profile: NomineeProfile | null | undefined,
+  awardKey: string,
 ): boolean {
-  return !!profile?.is_owner || !!profile?.is_admin;
+  return awardKey === "coolest_kiwi" && !!profile?.is_owner;
 }

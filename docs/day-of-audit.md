@@ -40,6 +40,8 @@ retry cannot create two teams or two sets of logins.
 Migration `0025` separated Bowl of the Day from the ceremony-opening switch:
 it accepts votes during play, while closing voting still freezes every award
 atomically.
+Migration `0026` narrowed the owner nominee opt-out to Coolest Kiwi only; the
+owner and helpers remain normally eligible for Bowl of the Day.
 
 ---
 

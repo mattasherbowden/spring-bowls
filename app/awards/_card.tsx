@@ -3,13 +3,13 @@
 import { useActionState, useState } from "react";
 import { castVote, type VoteState } from "./actions";
 import type { AwardDef } from "@/lib/domain/awards";
-import { ORGANISER_VOTE_MESSAGE } from "@/lib/domain/voting";
+import { OWNER_COOLEST_KIWI_MESSAGE } from "@/lib/domain/voting";
 
 type Nominee = {
   id: string;
   label: string;
   count: number;
-  organiser?: boolean;
+  ownerExcluded?: boolean;
 };
 
 export function AwardCard({
@@ -45,13 +45,13 @@ export function AwardCard({
         <input type="hidden" name="targetType" value={award.kind} />
         {nominees.map((n) => {
           const on = picked.has(n.id);
-          if (n.organiser) {
+          if (n.ownerExcluded) {
             return (
               <button
                 key={n.id}
                 type="button"
                 aria-disabled="true"
-                onClick={() => setNotice(ORGANISER_VOTE_MESSAGE)}
+                onClick={() => setNotice(OWNER_COOLEST_KIWI_MESSAGE)}
                 className="cursor-not-allowed rounded-full bg-black/[.03] px-3 py-1.5 text-sm text-foreground/45 opacity-70 ring-1 ring-black/5 transition hover:bg-black/[.05]"
               >
                 {n.label}

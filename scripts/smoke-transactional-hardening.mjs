@@ -178,6 +178,35 @@ try {
     removed.rowCount === 2 && remaining.rows[0].count === 0,
   );
 
+  const votingTeam = await client.query(
+    `
+      insert into public.team (tournament_id, name)
+      values ($1, 'Voting smoke')
+      returning id
+    `,
+    [tournamentId],
+  );
+  const ownerPlayer = await client.query(
+    `
+      insert into public.player
+        (tournament_id, team_id, profile_id, display_name, nationality)
+      values ($1, $2, $3, 'Owner target', 'kiwi')
+      returning id
+    `,
+    [tournamentId, votingTeam.rows[0].id, ownerId],
+  );
+  await client.query(
+    `
+      insert into public.player
+        (tournament_id, team_id, profile_id, display_name, nationality)
+      values ($1, $2, $3, 'Voting guest', 'brit')
+    `,
+    [
+      tournamentId,
+      votingTeam.rows[0].id,
+      guestProfiles.rows[0].profile_id,
+    ],
+  );
   await client.query(
     "update public.tournament set status = 'live' where id = $1",
     [tournamentId],
@@ -186,13 +215,17 @@ try {
     `
       insert into public.award_vote
         (tournament_id, award_key, voter_id, target_type, target_id)
-      values ($1, 'bowl_of_the_day', $2, 'player', gen_random_uuid())
+      values ($1, 'bowl_of_the_day', $2, 'player', $3)
       returning id
     `,
-    [tournamentId, guestProfiles.rows[0].profile_id],
+    [
+      tournamentId,
+      guestProfiles.rows[0].profile_id,
+      ownerPlayer.rows[0].id,
+    ],
   );
   check(
-    "Bowl of the Day accepts votes during live play",
+    "the owner can receive Bowl of the Day votes during live play",
     pendingBowlVote.rowCount === 1,
   );
   let pendingCeremonyRejected = false;
@@ -223,6 +256,36 @@ try {
   check(
     "Bowl of the Day votes can be changed during live play",
     deletedPendingBowl.rowCount === 1,
+  );
+  await client.query(
+    "update public.tournament set voting_status = 'open' where id = $1",
+    [tournamentId],
+  );
+  let ownerKiwiRejected = false;
+  await client.query("savepoint owner_coolest_kiwi_vote");
+  try {
+    await client.query(
+      `
+        insert into public.award_vote
+          (tournament_id, award_key, voter_id, target_type, target_id)
+        values ($1, 'coolest_kiwi', $2, 'player', $3)
+      `,
+      [
+        tournamentId,
+        guestProfiles.rows[0].profile_id,
+        ownerPlayer.rows[0].id,
+      ],
+    );
+  } catch (error) {
+    ownerKiwiRejected =
+      error?.code === "P0001" &&
+      /owner_coolest_kiwi_not_eligible/.test(error?.message ?? "");
+    await client.query("rollback to savepoint owner_coolest_kiwi_vote");
+  }
+  await client.query("release savepoint owner_coolest_kiwi_vote");
+  check(
+    "the owner is excluded from Coolest Kiwi only",
+    ownerKiwiRejected,
   );
   await client.query(
     "update public.tournament set voting_status = 'closed' where id = $1",

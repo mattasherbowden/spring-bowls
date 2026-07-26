@@ -160,6 +160,7 @@ try {
       team_id: team.id,
       profile_id: helper.id,
       display_name: "Helper",
+      nationality: "kiwi",
       role: "player",
     })
     .select("id")
@@ -169,7 +170,6 @@ try {
       `Could not create smoke helper player: ${helperPlayerError?.message}`,
     );
   }
-
   const memberClient = await signedInClient(member.email, member.password);
   const { data: mT } = await memberClient
     .from("tournament")
@@ -333,16 +333,20 @@ try {
     .from("tournament")
     .update({ voting_status: "open" })
     .eq("id", tournamentId);
-  const { error: adminNomineeError } = await admin.from("award_vote").insert({
-    tournament_id: tournamentId,
-    award_key: "bowl_of_the_day",
-    voter_id: member.id,
-    target_type: "player",
-    target_id: helperPlayer.id,
-  });
+  const { data: helperKiwiVote, error: helperKiwiError } = await admin
+    .from("award_vote")
+    .insert({
+      tournament_id: tournamentId,
+      award_key: "coolest_kiwi",
+      voter_id: member.id,
+      target_type: "player",
+      target_id: helperPlayer.id,
+    })
+    .select("id")
+    .single();
   check(
-    "the database rejects an individual-award vote for an organiser",
-    !!adminNomineeError?.message.includes("admin_nominee_not_eligible"),
+    "a helper retains normal Coolest Kiwi eligibility",
+    !helperKiwiError && !!helperKiwiVote?.id,
   );
   const { data: vote } = await admin
     .from("award_vote")

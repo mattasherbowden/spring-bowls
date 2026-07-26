@@ -22,7 +22,7 @@ day.
 - Deploy the latest `main` and confirm the deployment includes migration
   `0018_day_of_hardening.sql`, `0019_atomic_draw.sql`, and
   `0020_exclude_admin_nominees.sql` through
-  `0025_bowl_voting_during_play.sql`.
+  `0026_owner_coolest_kiwi_only.sql`.
 - Open `/api/warm` on the production domain. It should return `{"ok":true}`.
 - In Supabase, confirm the project says **Active**. Free projects with too
   little database activity can pause after seven days; the app now makes a
@@ -101,9 +101,9 @@ day.
   for ceremony voting. Closing voting freezes every award atomically, including
   Bowl of the Day, so an in-flight vote cannot slip into the final tally.
 - Award ties are shown as co-winners; the app does not secretly choose one.
-- Owners/helpers who are also players remain visible in individual-award lists
-  but are greyed out and cannot receive a vote. Their team remains eligible for
-  team awards.
+- The owner remains eligible for Bowl of the Day and every team award, but is
+  visibly unavailable for Coolest Kiwi with the requested friendly message.
+  Helpers retain normal award eligibility.
 
 ## Rules to agree before the first bowl
 
@@ -139,7 +139,7 @@ These are event-policy choices rather than safe assumptions for the software:
 - The generated draw is property-tested for 2–40 teams, group targets 3–5,
   top-one/top-two qualification, and 1–6 rinks. Bracket dependency properties
   are checked for every 2–16 qualifier field.
-- 318 unit/property tests passed.
+- 319 unit/property tests passed.
 - TypeScript, ESLint, and the production build passed.
 - Live Supabase smoke tests passed for player isolation, standalone helper
   access, fixture-write isolation, racing result locks, and voting closure.

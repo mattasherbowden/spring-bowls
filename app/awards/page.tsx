@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AWARDS, type AwardDef } from "@/lib/domain/awards";
 import {
   isAwardVotingOpen,
-  isOrganiserNominee,
+  isOwnerExcludedFromAward,
   type TournamentStatus,
   type VotingStatus,
 } from "@/lib/domain/voting";
@@ -177,8 +177,8 @@ export default async function AwardsPage() {
     myPicks.set(v.award_key, arr);
   }
 
-  // Nominees for VOTING exclude the voter's own team/self. Organisers remain
-  // visible for individual awards but are marked as deliberately unselectable.
+  // Nominees for VOTING exclude the voter's own team/self. The owner remains
+  // visible but deliberately unselectable for Coolest Kiwi only.
   const nomineesFor = (award: AwardDef) => {
     if (award.kind === "team") {
       return teams
@@ -196,7 +196,10 @@ export default async function AwardsPage() {
         id: p.id,
         label: `${flag(p.nationality)}${p.display_name}`,
         count: countOf(award.key, p.id),
-        organiser: isOrganiserNominee(organiserProfiles.get(p.profile_id)),
+        ownerExcluded: isOwnerExcludedFromAward(
+          organiserProfiles.get(p.profile_id),
+          award.key,
+        ),
       }));
   };
 
@@ -378,8 +381,8 @@ export default async function AwardsPage() {
       <p className="mt-6 text-sm text-foreground/60">
         Two votes for most awards and five for Bowl of the Day, each to a
         different nominee. You can change them until voting closes. You
-        can&apos;t vote for yourself, your own team, or an organiser for an
-        individual award.
+        can&apos;t vote for yourself or your own team. The owner has opted out
+        of Coolest Kiwi but remains eligible for Bowl of the Day.
       </p>
       <Link
         href="/awards/results"

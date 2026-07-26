@@ -6,8 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AWARD_BY_KEY } from "@/lib/domain/awards";
 import {
   isAwardVotingOpen,
-  isOrganiserNominee,
-  ORGANISER_VOTE_MESSAGE,
+  isOwnerExcludedFromAward,
+  OWNER_COOLEST_KIWI_MESSAGE,
   type TournamentStatus,
   type VotingStatus,
 } from "@/lib/domain/voting";
@@ -91,8 +91,8 @@ export async function castVote(
       .select("is_owner, is_admin")
       .eq("id", player.profile_id)
       .maybeSingle();
-    if (isOrganiserNominee(targetProfile)) {
-      return { error: ORGANISER_VOTE_MESSAGE };
+    if (isOwnerExcludedFromAward(targetProfile, awardKey)) {
+      return { error: OWNER_COOLEST_KIWI_MESSAGE };
     }
     if (award.nationality && player.nationality !== award.nationality) {
       return { error: "That player isn't eligible for this award." };
@@ -138,8 +138,8 @@ export async function castVote(
       if (error.message?.includes("voting_closed")) {
         return { error: "Voting has closed." };
       }
-      if (error.message?.includes("admin_nominee_not_eligible")) {
-        return { error: ORGANISER_VOTE_MESSAGE };
+      if (error.message?.includes("owner_coolest_kiwi_not_eligible")) {
+        return { error: OWNER_COOLEST_KIWI_MESSAGE };
       }
       if (error.message?.includes("vote_limit_reached")) {
         return {

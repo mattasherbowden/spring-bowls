@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { isAwardVotingOpen, isOrganiserNominee } from "./voting";
+import {
+  isAwardVotingOpen,
+  isOwnerExcludedFromAward,
+} from "./voting";
 
 describe("isAwardVotingOpen", () => {
   it("keeps Bowl of the Day open before ceremony voting starts", () => {
@@ -19,14 +22,38 @@ describe("isAwardVotingOpen", () => {
   });
 });
 
-describe("isOrganiserNominee", () => {
-  it("blocks both the owner and helper admins from individual awards", () => {
-    expect(isOrganiserNominee({ is_owner: true, is_admin: false })).toBe(true);
-    expect(isOrganiserNominee({ is_owner: false, is_admin: true })).toBe(true);
+describe("isOwnerExcludedFromAward", () => {
+  it("excludes the owner from Coolest Kiwi", () => {
+    expect(
+      isOwnerExcludedFromAward(
+        { is_owner: true, is_admin: false },
+        "coolest_kiwi",
+      ),
+    ).toBe(true);
   });
 
-  it("keeps ordinary players eligible", () => {
-    expect(isOrganiserNominee({ is_owner: false, is_admin: false })).toBe(false);
-    expect(isOrganiserNominee(null)).toBe(false);
+  it("keeps the owner eligible for Bowl of the Day", () => {
+    expect(
+      isOwnerExcludedFromAward(
+        { is_owner: true, is_admin: false },
+        "bowl_of_the_day",
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps helpers and ordinary players eligible for Coolest Kiwi", () => {
+    expect(
+      isOwnerExcludedFromAward(
+        { is_owner: false, is_admin: true },
+        "coolest_kiwi",
+      ),
+    ).toBe(false);
+    expect(
+      isOwnerExcludedFromAward(
+        { is_owner: false, is_admin: false },
+        "coolest_kiwi",
+      ),
+    ).toBe(false);
+    expect(isOwnerExcludedFromAward(null, "coolest_kiwi")).toBe(false);
   });
 });
