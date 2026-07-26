@@ -3,7 +3,12 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AWARDS, type AwardDef } from "@/lib/domain/awards";
-import { isOrganiserNominee } from "@/lib/domain/voting";
+import {
+  isAwardVotingOpen,
+  isOrganiserNominee,
+  type TournamentStatus,
+  type VotingStatus,
+} from "@/lib/domain/voting";
 import { AwardCard } from "./_card";
 import { VotingStatusButton } from "./_status-button";
 import { HomeButton } from "../_components/home-button";
@@ -57,7 +62,7 @@ export default async function AwardsPage() {
   const admin = createAdminClient();
   const { data: tournament, error: tournamentError } = await admin
     .from("tournament")
-    .select("id, voting_status")
+    .select("id, status, voting_status")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
@@ -81,7 +86,12 @@ export default async function AwardsPage() {
     );
   }
 
-  const status = tournament.voting_status as "pending" | "open" | "closed";
+  const status = tournament.voting_status as VotingStatus;
+  const bowlOpen = isAwardVotingOpen(
+    status,
+    "bowl_of_the_day",
+    tournament.status as TournamentStatus,
+  );
 
   const [
     playersResult,
@@ -230,13 +240,19 @@ export default async function AwardsPage() {
       <p className="font-medium">
         Voting is{" "}
         <span className="text-brand-dark">
-          {status === "open" ? "open" : status === "closed" ? "closed" : "not open yet"}
+          {status === "open"
+            ? "open for every award"
+            : status === "closed"
+              ? "closed"
+              : bowlOpen
+                ? "open for Bowl of the Day only"
+                : "not open yet"}
         </span>{" "}
         <span className="text-xs text-foreground/50">(you control this)</span>
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
         {status !== "open" && (
-          <VotingStatusButton to="open" label="Open voting" />
+          <VotingStatusButton to="open" label="Open all awards" />
         )}
         {status === "open" && (
           <VotingStatusButton
@@ -316,17 +332,41 @@ export default async function AwardsPage() {
   }
 
   if (status === "pending") {
+    const bowlAward = AWARDS.find(
+      (award) => award.key === "bowl_of_the_day",
+    );
     return (
       <Frame>
         {adminBar}
-        <div className="mt-8 rounded-2xl bg-white p-6 text-center shadow-sm ring-1 ring-black/5">
-          <p className="text-4xl">🗳️</p>
-          <p className="mt-2 font-medium">Voting hasn&apos;t opened yet</p>
-          <p className="mt-1 text-sm text-foreground/60">
-            Check back later — most awards give you two votes; Bowl of the Day
-            gives you five.
-          </p>
-        </div>
+        {bowlOpen ? (
+          <>
+            <div className="mt-6 rounded-2xl bg-brand/10 p-5 text-center ring-1 ring-brand/30">
+              <p className="text-3xl">🎯</p>
+              <p className="mt-1 font-medium">Bowl of the Day is open</p>
+              <p className="mt-1 text-sm text-foreground/60">
+                Add up to five memorable bowls as the games happen. The other
+                awards will appear when an organiser opens ceremony voting.
+              </p>
+            </div>
+            {bowlAward && (
+              <div className="mt-4">
+                <AwardCard
+                  award={bowlAward}
+                  nominees={nomineesFor(bowlAward)}
+                  picks={myPicks.get(bowlAward.key) ?? []}
+                />
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="mt-8 rounded-2xl bg-white p-6 text-center shadow-sm ring-1 ring-black/5">
+            <p className="text-4xl">🗳️</p>
+            <p className="mt-2 font-medium">Voting hasn&apos;t opened yet</p>
+            <p className="mt-1 text-sm text-foreground/60">
+              Bowl of the Day opens automatically once the draw goes live.
+            </p>
+          </div>
+        )}
       </Frame>
     );
   }

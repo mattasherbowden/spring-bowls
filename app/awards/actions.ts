@@ -5,8 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AWARD_BY_KEY } from "@/lib/domain/awards";
 import {
+  isAwardVotingOpen,
   isOrganiserNominee,
   ORGANISER_VOTE_MESSAGE,
+  type TournamentStatus,
+  type VotingStatus,
 } from "@/lib/domain/voting";
 
 export type VoteState = { error?: string };
@@ -32,13 +35,24 @@ export async function castVote(
   const admin = createAdminClient();
   const { data: tournament } = await admin
     .from("tournament")
-    .select("id, voting_status")
+    .select("id, status, voting_status")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
   if (!tournament) return { error: "No active tournament." };
-  if (tournament.voting_status !== "open") {
-    return { error: "Voting isn't open right now." };
+  if (
+    !isAwardVotingOpen(
+      tournament.voting_status as VotingStatus,
+      awardKey,
+      tournament.status as TournamentStatus,
+    )
+  ) {
+    return {
+      error:
+        awardKey === "bowl_of_the_day"
+          ? "Bowl of the Day voting has closed."
+          : "Ceremony voting isn't open right now.",
+    };
   }
 
   // The voter's own roster row (if any) — for self / own-team exclusion.

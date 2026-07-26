@@ -22,7 +22,7 @@ day.
 - Deploy the latest `main` and confirm the deployment includes migration
   `0018_day_of_hardening.sql`, `0019_atomic_draw.sql`, and
   `0020_exclude_admin_nominees.sql` through
-  `0024_team_submission_idempotency.sql`.
+  `0025_bowl_voting_during_play.sql`.
 - Open `/api/warm` on the production domain. It should return `{"ok":true}`.
 - In Supabase, confirm the project says **Active**. Free projects with too
   little database activity can pause after seven days; the app now makes a
@@ -96,8 +96,10 @@ day.
 - If all group scores are in but a knockout slot still says TBA, the owner taps
   **Refresh knockout** on the schedule. Any database failure is shown beside
   the control.
-- Open voting only when ready. Closing voting now takes effect atomically:
-  an in-flight vote cannot slip into the final tally afterwards.
+- Bowl of the Day is available while the other awards are still pending, so
+  the post-score prompt works throughout play. Open all awards only when ready
+  for ceremony voting. Closing voting freezes every award atomically, including
+  Bowl of the Day, so an in-flight vote cannot slip into the final tally.
 - Award ties are shown as co-winners; the app does not secretly choose one.
 - Owners/helpers who are also players remain visible in individual-award lists
   but are greyed out and cannot receive a vote. Their team remains eligible for
@@ -137,7 +139,7 @@ These are event-policy choices rather than safe assumptions for the software:
 - The generated draw is property-tested for 2–40 teams, group targets 3–5,
   top-one/top-two qualification, and 1–6 rinks. Bracket dependency properties
   are checked for every 2–16 qualifier field.
-- 315 unit/property tests passed.
+- 318 unit/property tests passed.
 - TypeScript, ESLint, and the production build passed.
 - Live Supabase smoke tests passed for player isolation, standalone helper
   access, fixture-write isolation, racing result locks, and voting closure.

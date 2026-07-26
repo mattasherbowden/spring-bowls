@@ -328,7 +328,7 @@ try {
     (staleWalkover?.length ?? 0) === 0,
   );
 
-  // Voting closure is enforced in the same DB transaction as the ballot write.
+  // Final closure is enforced in the same DB transaction as the ballot write.
   await admin
     .from("tournament")
     .update({ voting_status: "open" })
@@ -371,6 +371,17 @@ try {
   check(
     "the database rejects a vote after voting closes",
     !!closedInsertError?.message.includes("voting_closed"),
+  );
+  const { error: closedBowlError } = await admin.from("award_vote").insert({
+    tournament_id: tournamentId,
+    award_key: "bowl_of_the_day",
+    voter_id: helper.id,
+    target_type: "player",
+    target_id: memberPlayer.id,
+  });
+  check(
+    "closing voting also freezes Bowl of the Day",
+    !!closedBowlError?.message.includes("voting_closed"),
   );
   const { error: closedDeleteError } = await admin
     .from("award_vote")

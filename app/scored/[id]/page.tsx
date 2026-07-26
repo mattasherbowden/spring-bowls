@@ -7,6 +7,11 @@ import {
   throwIfAuthUnavailable,
   throwIfSupabaseError,
 } from "@/lib/supabase/query-error";
+import {
+  isAwardVotingOpen,
+  type TournamentStatus,
+  type VotingStatus,
+} from "@/lib/domain/voting";
 
 type TeamLite = { id: string; name: string | null; players: { display_name: string }[] };
 
@@ -34,7 +39,7 @@ export default async function ScoredPage({
       .maybeSingle(),
     admin
       .from("tournament")
-      .select("voting_status")
+      .select("status, voting_status")
       .neq("status", "archived")
       .limit(1)
       .maybeSingle(),
@@ -44,7 +49,13 @@ export default async function ScoredPage({
   const fixture = fixtureResult.data;
   const tournament = tournamentResult.data;
 
-  const votingOpen = tournament?.voting_status === "open";
+  const votingOpen = tournament
+    ? isAwardVotingOpen(
+        tournament.voting_status as VotingStatus,
+        "bowl_of_the_day",
+        tournament.status as TournamentStatus,
+      )
+    : false;
 
   let aName = "Team A";
   let bName = "Team B";

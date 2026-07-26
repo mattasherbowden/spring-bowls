@@ -6,6 +6,27 @@ export type NomineeProfile = {
   is_admin?: boolean | null;
 };
 
+export type VotingStatus = "pending" | "open" | "closed";
+export type TournamentStatus = "setup" | "live" | "archived";
+
+/**
+ * Bowl of the Day is collected while games are being played. The organiser's
+ * normal Open voting control releases every other award; Close voting freezes
+ * the entire ballot for the ceremony.
+ */
+export function isAwardVotingOpen(
+  status: VotingStatus,
+  awardKey: string,
+  tournamentStatus: TournamentStatus,
+): boolean {
+  return status === "open" ||
+    (
+      tournamentStatus === "live" &&
+      status === "pending" &&
+      awardKey === "bowl_of_the_day"
+    );
+}
+
 /** Owners and helpers may vote, but cannot be individual-award nominees. */
 export function isOrganiserNominee(
   profile: NomineeProfile | null | undefined,

@@ -178,6 +178,75 @@ try {
     removed.rowCount === 2 && remaining.rows[0].count === 0,
   );
 
+  await client.query(
+    "update public.tournament set status = 'live' where id = $1",
+    [tournamentId],
+  );
+  const pendingBowlVote = await client.query(
+    `
+      insert into public.award_vote
+        (tournament_id, award_key, voter_id, target_type, target_id)
+      values ($1, 'bowl_of_the_day', $2, 'player', gen_random_uuid())
+      returning id
+    `,
+    [tournamentId, guestProfiles.rows[0].profile_id],
+  );
+  check(
+    "Bowl of the Day accepts votes during live play",
+    pendingBowlVote.rowCount === 1,
+  );
+  let pendingCeremonyRejected = false;
+  await client.query("savepoint pending_ceremony_vote");
+  try {
+    await client.query(
+      `
+        insert into public.award_vote
+          (tournament_id, award_key, voter_id, target_type, target_id)
+        values ($1, 'best_dressed', $2, 'team', gen_random_uuid())
+      `,
+      [tournamentId, guestProfiles.rows[0].profile_id],
+    );
+  } catch (error) {
+    pendingCeremonyRejected =
+      error?.code === "P0001" && /voting_closed/.test(error?.message ?? "");
+    await client.query("rollback to savepoint pending_ceremony_vote");
+  }
+  await client.query("release savepoint pending_ceremony_vote");
+  check(
+    "ceremony awards stay closed during live play",
+    pendingCeremonyRejected,
+  );
+  const deletedPendingBowl = await client.query(
+    "delete from public.award_vote where id = $1 returning id",
+    [pendingBowlVote.rows[0].id],
+  );
+  check(
+    "Bowl of the Day votes can be changed during live play",
+    deletedPendingBowl.rowCount === 1,
+  );
+  await client.query(
+    "update public.tournament set voting_status = 'closed' where id = $1",
+    [tournamentId],
+  );
+  let closedBowlRejected = false;
+  await client.query("savepoint closed_bowl_vote");
+  try {
+    await client.query(
+      `
+        insert into public.award_vote
+          (tournament_id, award_key, voter_id, target_type, target_id)
+        values ($1, 'bowl_of_the_day', $2, 'player', gen_random_uuid())
+      `,
+      [tournamentId, guestProfiles.rows[0].profile_id],
+    );
+  } catch (error) {
+    closedBowlRejected =
+      error?.code === "P0001" && /voting_closed/.test(error?.message ?? "");
+    await client.query("rollback to savepoint closed_bowl_vote");
+  }
+  await client.query("release savepoint closed_bowl_vote");
+  check("closing voting freezes Bowl of the Day", closedBowlRejected);
+
   const recoveryHash = "transactional-smoke-recovery-hash";
   await client.query(
     "update public.profile set recovery_hash = $1 where id = $2",

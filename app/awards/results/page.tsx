@@ -10,6 +10,11 @@ import {
   throwIfAuthUnavailable,
   throwIfSupabaseError,
 } from "@/lib/supabase/query-error";
+import {
+  isAwardVotingOpen,
+  type TournamentStatus,
+  type VotingStatus,
+} from "@/lib/domain/voting";
 
 type PlayerRow = { id: string; display_name: string; nationality: string | null };
 type TeamRow = { id: string; name: string | null; players: { display_name: string }[] };
@@ -30,14 +35,19 @@ export default async function ResultsPage() {
   const admin = createAdminClient();
   const { data: tournament, error: tournamentError } = await admin
     .from("tournament")
-    .select("id, voting_status")
+    .select("id, status, voting_status")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
   throwIfSupabaseError(tournamentError, "award results tournament");
   if (!tournament) redirect("/awards");
 
-  const status = tournament.voting_status as "pending" | "open" | "closed";
+  const status = tournament.voting_status as VotingStatus;
+  const bowlOpen = isAwardVotingOpen(
+    status,
+    "bowl_of_the_day",
+    tournament.status as TournamentStatus,
+  );
 
   const [playersResult, teamsResult, votesResult] = await Promise.all([
       admin
@@ -116,7 +126,9 @@ export default async function ResultsPage() {
               ? "Final tallies."
               : status === "open"
                 ? "Updating as votes come in · reload to refresh."
-                : "Voting hasn't opened yet."}
+                : bowlOpen
+                  ? "Bowl of the Day is open; ceremony voting hasn't opened yet."
+                  : "Voting hasn't opened yet."}
             {totalVotes > 0 && ` · ${totalVotes} vote${totalVotes === 1 ? "" : "s"} so far`}
           </p>
           <div className="mt-2">
