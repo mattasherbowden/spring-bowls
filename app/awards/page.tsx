@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AWARDS, type AwardDef } from "@/lib/domain/awards";
 import {
+  buildPlayerVotingLabels,
   isAwardVotingOpen,
   isOwnerExcludedFromAward,
   type TournamentStatus,
@@ -155,6 +156,13 @@ export default async function AwardsPage() {
     const t = teams.find((x) => x.id === id);
     return t ? teamLabel(t) : "—";
   };
+  const playerVotingLabels = buildPlayerVotingLabels(
+    players.map((player) => ({
+      id: player.id,
+      displayName: player.display_name,
+      teamLabel: player.team_id ? teamLabelById(player.team_id) : null,
+    })),
+  );
 
   const voter = players.find((p) => p.profile_id === user.id);
   const voterPlayerId = voter?.id ?? null;
@@ -194,7 +202,9 @@ export default async function AwardsPage() {
       .filter((p) => !award.nationality || p.nationality === award.nationality)
       .map((p) => ({
         id: p.id,
-        label: `${flag(p.nationality)}${p.display_name}`,
+        label: `${flag(p.nationality)}${
+          playerVotingLabels.get(p.id) ?? p.display_name
+        }`,
         count: countOf(award.key, p.id),
         ownerExcluded: isOwnerExcludedFromAward(
           organiserProfiles.get(p.profile_id),
@@ -218,7 +228,9 @@ export default async function AwardsPage() {
             )
             .map((p) => ({
               id: p.id,
-              label: `${flag(p.nationality)}${p.display_name}`,
+              label: `${flag(p.nationality)}${
+                playerVotingLabels.get(p.id) ?? p.display_name
+              }`,
               count: countOf(award.key, p.id),
             }));
     const max = candidates.reduce((m, c) => Math.max(m, c.count), 0);

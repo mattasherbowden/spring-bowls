@@ -19,6 +19,9 @@ day.
   so it cannot create a duplicate team. If the first request is still finishing
   its logins, wait a moment rather than changing the names and creating a
   second copy.
+- Enter full player names where known. Voting abbreviates them to first name and
+  surname initial (for example, `Ben Cochrane` becomes `Ben C.`), with automatic
+  full-name or team fallbacks if two abbreviated labels would still match.
 - Deploy the latest `main` and confirm the deployment includes migration
   `0018_day_of_hardening.sql`, `0019_atomic_draw.sql`, and
   `0020_exclude_admin_nominees.sql` through
@@ -139,7 +142,7 @@ These are event-policy choices rather than safe assumptions for the software:
 - The generated draw is property-tested for 2–40 teams, group targets 3–5,
   top-one/top-two qualification, and 1–6 rinks. Bracket dependency properties
   are checked for every 2–16 qualifier field.
-- 319 unit/property tests passed.
+- 322 unit/property tests passed.
 - TypeScript, ESLint, and the production build passed.
 - Live Supabase smoke tests passed for player isolation, standalone helper
   access, fixture-write isolation, racing result locks, and voting closure.

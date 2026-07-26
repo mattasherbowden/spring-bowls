@@ -42,6 +42,9 @@ it accepts votes during play, while closing voting still freezes every award
 atomically.
 Migration `0026` narrowed the owner nominee opt-out to Coolest Kiwi only; the
 owner and helpers remain normally eligible for Bowl of the Day.
+Voting labels now abbreviate full player names and automatically fall back to
+full-name or team context, so duplicate first names never merge or appear
+indistinguishable on ballots/results.
 
 ---
 

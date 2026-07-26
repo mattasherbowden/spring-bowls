@@ -11,12 +11,18 @@ import {
   throwIfSupabaseError,
 } from "@/lib/supabase/query-error";
 import {
+  buildPlayerVotingLabels,
   isAwardVotingOpen,
   type TournamentStatus,
   type VotingStatus,
 } from "@/lib/domain/voting";
 
-type PlayerRow = { id: string; display_name: string; nationality: string | null };
+type PlayerRow = {
+  id: string;
+  display_name: string;
+  nationality: string | null;
+  team_id: string | null;
+};
 type TeamRow = { id: string; name: string | null; players: { display_name: string }[] };
 
 function flag(n: string | null): string {
@@ -52,7 +58,7 @@ export default async function ResultsPage() {
   const [playersResult, teamsResult, votesResult] = await Promise.all([
       admin
         .from("player")
-        .select("id, display_name, nationality")
+        .select("id, display_name, nationality, team_id")
         .eq("tournament_id", tournament.id),
       admin
         .from("team")
@@ -74,6 +80,17 @@ export default async function ResultsPage() {
   const teams = (teamsData ?? []) as TeamRow[];
   const teamLabel = (t: TeamRow) =>
     t.name ?? t.players.map((p) => p.display_name).join(" & ");
+  const teamLabelById = (id: string) => {
+    const team = teams.find((candidate) => candidate.id === id);
+    return team ? teamLabel(team) : "—";
+  };
+  const playerVotingLabels = buildPlayerVotingLabels(
+    players.map((player) => ({
+      id: player.id,
+      displayName: player.display_name,
+      teamLabel: player.team_id ? teamLabelById(player.team_id) : null,
+    })),
+  );
 
   const tally = new Map<string, Map<string, number>>();
   for (const v of allVotes ?? []) {
@@ -97,7 +114,9 @@ export default async function ResultsPage() {
             )
             .map((p) => ({
               id: p.id,
-              label: `${flag(p.nationality)}${p.display_name}`,
+              label: `${flag(p.nationality)}${
+                playerVotingLabels.get(p.id) ?? p.display_name
+              }`,
               count: countOf(award.key, p.id),
             }));
     return cand.filter((c) => c.count > 0).sort((a, b) => b.count - a.count);
