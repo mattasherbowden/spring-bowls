@@ -6,6 +6,7 @@ import {
   qualificationTieAtCutoff,
 } from "@/lib/domain/standings";
 import { buildBracket } from "@/lib/domain/bracket";
+import { bonusBowlOff } from "@/lib/domain/consolation";
 import type { Fixture } from "@/lib/domain/types";
 
 export type KnockoutResolution = { error?: string };
@@ -109,6 +110,25 @@ export async function resolveKnockout(
           order_index: 1000 + ri * 100,
         })),
     );
+    const bowlOff = bonusBowlOff(
+      groupLabels.map((label) => ({
+        label,
+        size: groupSize.get(label) ?? 0,
+      })),
+      advance,
+    );
+    if (bowlOff) {
+      rows.push({
+        tournament_id: tournamentId,
+        stage: "knockout",
+        match_code: bowlOff.matchCode,
+        round: bowlOff.round,
+        team_a_source: bowlOff.teamASource,
+        team_b_source: bowlOff.teamBSource,
+        status: "pending",
+        order_index: 1000,
+      });
+    }
     const { error: insertError } = await admin.from("fixture").insert(rows);
     // Two simultaneous final group scores may both create the bracket. The
     // unique index makes one lose harmlessly; any other insert error matters.

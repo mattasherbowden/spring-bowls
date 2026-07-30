@@ -2,6 +2,9 @@
 // game counts, fixtures per team, knockout shape) and a rough time budget.
 // Pure and unit-tested; used live by the setup wizard.
 
+import { bonusBowlOff } from "./consolation";
+import { buildGroupSchedule } from "./schedule";
+
 export interface PlanInput {
   teams: number;
   teamSize: number;
@@ -18,10 +21,12 @@ export interface TournamentPlan {
   groupGames: number;
   fixturesPerTeam: { min: number; max: number };
   qualifiers: number;
-  knockoutRounds: number;
   knockoutGames: number;
+  knockoutRounds: number;
+  consolationGames: number;
   byes: number;
   totalGames: number;
+  minimumGamesPerTeam: number;
   headcount: number;
   gameMinutes: number;
   estMinutes: number;
@@ -80,9 +85,18 @@ export function planTournament(input: PlanInput): TournamentPlan {
     0,
   );
   if (qualifiers > teams) qualifiers = teams;
+  const consolation = bonusBowlOff(
+    groups.map((groupSize, groupIndex) => ({
+      label: String.fromCharCode(65 + groupIndex),
+      size: groupSize,
+    })),
+    input.advance,
+  );
+  const consolationGames = consolation ? 1 : 0;
 
   // Single elimination: Q entrants play Q-1 games. Walk the rounds so we can
-  // count byes and time each round against the available rinks.
+  // count byes and time each round against the available rinks. The special
+  // bowl-off shares the first knockout wave when a rink is free.
   let entrants = qualifiers >= 2 ? qualifiers : 0;
   let knockoutGames = 0;
   let knockoutRounds = 0;
@@ -90,7 +104,9 @@ export function planTournament(input: PlanInput): TournamentPlan {
   while (entrants > 1) {
     const games = Math.floor(entrants / 2);
     knockoutGames += games;
-    knockoutWaves += Math.ceil(games / rinks);
+    const postGroupGames =
+      games + (knockoutRounds === 0 ? consolationGames : 0);
+    knockoutWaves += Math.ceil(postGroupGames / rinks);
     entrants = Math.ceil(entrants / 2);
     knockoutRounds++;
   }
@@ -142,12 +158,13 @@ export function planTournament(input: PlanInput): TournamentPlan {
     qualifiers,
     knockoutRounds,
     knockoutGames,
+    consolationGames,
     byes,
-    totalGames: groupGames + knockoutGames,
+    totalGames: groupGames + knockoutGames + consolationGames,
+    minimumGamesPerTeam: consolation ? 3 : fixturesPerTeam.min,
     headcount: teams * teamSize,
     gameMinutes,
     estMinutes,
     warnings,
   };
 }
-import { buildGroupSchedule } from "./schedule";

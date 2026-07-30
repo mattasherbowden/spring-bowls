@@ -18,11 +18,13 @@ import {
   throwIfAuthUnavailable,
   throwIfSupabaseError,
 } from "@/lib/supabase/query-error";
+import { isBonusBowlOff } from "@/lib/domain/consolation";
 
 type TeamLite = { id: string; name: string | null; players: { display_name: string }[] };
 type FixtureLite = {
   id: string;
   stage: string;
+  match_code: string | null;
   round: number | null;
   rink: number | null;
   order_index: number;
@@ -489,7 +491,7 @@ async function PlayerHome({
   const { data: myFixturesData, error: myFixturesError } = await supabase
     .from("fixture")
     .select(
-      "id, stage, round, rink, order_index, team_a_id, team_b_id, status, shots_a, shots_b, winner_team_id",
+      "id, stage, match_code, round, rink, order_index, team_a_id, team_b_id, status, shots_a, shots_b, winner_team_id",
     )
     .eq("tournament_id", tournamentId)
     .or(`team_a_id.eq.${teamId},team_b_id.eq.${teamId}`)
@@ -589,6 +591,8 @@ async function PlayerHome({
 
   const isDone = (f: FixtureLite) =>
     f.status === "completed" || f.status === "walkover";
+  const gameLabel = (f: FixtureLite): string =>
+    isBonusBowlOff(f.match_code) ? "Bonus bowl-off" : "Knockout";
   const played = myFixtures.filter(isDone);
   const unplayed = myFixtures.filter((f) => !isDone(f));
   const upNext = unplayed[0];
@@ -685,7 +689,9 @@ async function PlayerHome({
                     status === "waiting" ? "text-amber-800" : "text-brand-dark"
                   }`}
                 >
-                  {upNext.stage === "knockout" ? "Knockout · next" : "Up next"}
+                  {upNext.stage === "knockout"
+                    ? `${gameLabel(upNext)} · next`
+                    : "Up next"}
                 </span>
                 {upNext.rink && (
                   <div className="text-right leading-none">
@@ -825,7 +831,7 @@ async function PlayerHome({
                   className="rounded-2xl border border-dashed border-coming-line bg-coming p-4 text-coming-ink"
                 >
                   <span className="text-xs font-medium uppercase tracking-wide text-foreground/50">
-                    {f.stage === "knockout" ? "Knockout" : "Group game"}
+                    {f.stage === "knockout" ? gameLabel(f) : "Group game"}
                     {f.rink ? ` · Rink ${f.rink}` : ""}
                   </span>
                   <p className="mt-1 font-medium">v {nameOf(v.oppId)}</p>
@@ -850,7 +856,7 @@ async function PlayerHome({
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium uppercase tracking-wide text-foreground/50">
-                      {f.stage === "knockout" ? "Knockout · " : ""}
+                      {f.stage === "knockout" ? `${gameLabel(f)} · ` : ""}
                       {v.won ? "Won" : "Lost"}
                       {f.rink ? ` · Rink ${f.rink}` : ""}
                     </span>

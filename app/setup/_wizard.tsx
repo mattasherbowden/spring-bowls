@@ -209,11 +209,23 @@ export function SetupWizard() {
             value={`${plan.headcount}`}
             sub={`${teams} teams of ${teamSize}`}
           />
-          <Stat label="Group games each" value={perTeam} sub="round-robin" />
+          <Stat
+            label="Group games each"
+            value={perTeam}
+            sub={
+              plan.consolationGames
+                ? `${plan.minimumGamesPerTeam} guaranteed incl. bowl-off`
+                : "round-robin"
+            }
+          />
           <Stat
             label="Total games"
             value={`${plan.totalGames}`}
-            sub={`${plan.groupGames} group + ${plan.knockoutGames} knockout`}
+            sub={`${plan.groupGames} group + ${plan.knockoutGames} knockout${
+              plan.consolationGames
+                ? ` + ${plan.consolationGames} bowl-off`
+                : ""
+            }`}
           />
           <Stat
             label="Knockout"
@@ -233,6 +245,13 @@ export function SetupWizard() {
         <p className="mt-4 text-xs text-foreground/50">
           A rough budget — deciders, breaks and slow games add slack.
         </p>
+        {plan.consolationGames > 0 && (
+          <p className="mt-3 rounded-lg bg-brand/10 px-3 py-2 text-xs text-brand-dark">
+            Everyone gets at least three games: the winner of the three-team
+            group reaches a semi-final, while its other two teams play a bonus
+            bowl-off on the spare rink.
+          </p>
+        )}
         {plan.warnings.length > 0 && (
           <ul className="mt-3 space-y-1">
             {plan.warnings.map((w) => (

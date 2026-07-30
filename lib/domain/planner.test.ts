@@ -78,6 +78,27 @@ describe("planTournament", () => {
     expect(p.knockoutRounds).toBe(2);
   });
 
+  it("guarantees three games in the 15-team four-group format", () => {
+    const p = planTournament({
+      ...base,
+      teams: 15,
+      endsPerGame: 1,
+      minutesPerEnd: 12,
+      advance: 1,
+      preferredGroupSize: 4,
+    });
+    expect(p.groups).toEqual([4, 4, 4, 3]);
+    expect(p.fixturesPerTeam).toEqual({ min: 2, max: 3 });
+    expect(p.groupGames).toBe(21);
+    expect(p.qualifiers).toBe(4);
+    expect(p.knockoutGames).toBe(3);
+    expect(p.consolationGames).toBe(1);
+    expect(p.minimumGamesPerTeam).toBe(3);
+    expect(p.totalGames).toBe(25);
+    // 7 group waves, then bowl-off + both semis together, then the final.
+    expect(p.estMinutes).toBe(108);
+  });
+
   it("more rinks shortens the estimate", () => {
     const few = planTournament({ ...base, rinks: 2 });
     const many = planTournament({ ...base, rinks: 6 });

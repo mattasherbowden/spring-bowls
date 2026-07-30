@@ -7,6 +7,7 @@ import {
   throwIfAuthUnavailable,
   throwIfSupabaseError,
 } from "@/lib/supabase/query-error";
+import { isBonusBowlOff } from "@/lib/domain/consolation";
 
 type TeamRow = {
   id: string;
@@ -16,6 +17,7 @@ type TeamRow = {
 
 function koLabel(code: string | null): string {
   if (!code) return "Knockout";
+  if (isBonusBowlOff(code)) return "Bonus bowl-off";
   if (code.startsWith("QF")) return "Quarter-final";
   if (code.startsWith("SF")) return "Semi-final";
   if (code.startsWith("R")) return "Knockout";

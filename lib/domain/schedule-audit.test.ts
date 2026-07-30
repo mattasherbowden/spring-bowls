@@ -155,6 +155,27 @@ describe("auditKnockoutSchedule", () => {
     expect(auditKnockoutSchedule(validKnockout)).toEqual([]);
   });
 
+  it("accepts an independent first-round bonus bowl-off", () => {
+    expect(
+      auditKnockoutSchedule([
+        ...validKnockout,
+        {
+          id: "bowl",
+          matchCode: "BOWL1",
+          round: 1,
+          teamASource: "D2",
+          teamBSource: "D3",
+          teamA: "d2",
+          teamB: "d3",
+          status: "scheduled",
+          shotsA: null,
+          shotsB: null,
+          winnerTeam: null,
+        },
+      ]),
+    ).toEqual([]);
+  });
+
   it("detects phantom byes, missing references and invalid finished results", () => {
     const broken = validKnockout.map((fixture) => ({ ...fixture }));
     broken[0].teamBSource = null;

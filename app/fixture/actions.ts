@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fixtureResult } from "@/lib/domain/fixture";
 import { validateScoreEntry } from "@/lib/domain/score-entry";
 import { resolveKnockout } from "@/lib/server/knockout";
+import { isBonusBowlOff } from "@/lib/domain/consolation";
 
 export type ScoreState = { error?: string };
 
@@ -169,7 +170,7 @@ export async function unlockFixture(
   const admin = createAdminClient();
   const { data: fixture, error: fixtureError } = await admin
     .from("fixture")
-    .select("tournament_id, stage, round, status")
+    .select("tournament_id, stage, match_code, round, status")
     .eq("id", fixtureId)
     .maybeSingle();
   if (fixtureError) {
@@ -204,7 +205,9 @@ export async function unlockFixture(
   const downstreamResult =
     fixture.stage === "group"
       ? await downstream
-      : await downstream.gt("round", fixture.round ?? 0);
+      : isBonusBowlOff(fixture.match_code)
+        ? { count: 0, error: null }
+        : await downstream.gt("round", fixture.round ?? 0);
   if (downstreamResult.error) {
     return {
       error: "Could not check the knockout before resetting. Refresh and try again.",

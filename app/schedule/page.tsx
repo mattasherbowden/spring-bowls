@@ -15,6 +15,10 @@ import {
   knockoutRoundName,
 } from "@/lib/domain/bracket";
 import {
+  bonusBowlOff,
+  isBonusBowlOff,
+} from "@/lib/domain/consolation";
+import {
   auditGroupSchedule,
   auditKnockoutSchedule,
 } from "@/lib/domain/schedule-audit";
@@ -275,12 +279,22 @@ export default async function SchedulePage() {
     }
   }
   const projected = buildBracket(qualifierLabels);
+  const projectedBowlOff = bonusBowlOff(
+    groupLabels.map((label) => ({
+      label,
+      size: groupSize.get(label) ?? 0,
+    })),
+    tournament.advance,
+  );
   const knockoutWaves = projected.reduce(
-    (sum, round) =>
+    (sum, round, roundIndex) =>
       sum +
       Math.ceil(
-        round.matches.filter((match) => match.a !== null && match.b !== null)
-          .length / tournament.rink_count,
+        (round.matches.filter(
+          (match) => match.a !== null && match.b !== null,
+        ).length +
+          (roundIndex === 0 && projectedBowlOff ? 1 : 0)) /
+          tournament.rink_count,
       ),
     0,
   );
@@ -296,13 +310,19 @@ export default async function SchedulePage() {
     (fixture) =>
       fixture.status === "completed" || fixture.status === "walkover",
   ).length;
-  const knockoutDone = koFixtures.filter(
+  const postGroupDone = koFixtures.filter(
     (fixture) =>
       fixture.status === "completed" || fixture.status === "walkover",
   ).length;
 
+  const bowlOffFixtures = koFixtures.filter((fixture) =>
+    isBonusBowlOff(fixture.match_code),
+  );
+  const bracketFixtures = koFixtures.filter(
+    (fixture) => !isBonusBowlOff(fixture.match_code),
+  );
   const koByRound = new Map<number, KoRow[]>();
-  for (const k of koFixtures) {
+  for (const k of bracketFixtures) {
     const r = k.round ?? 0;
     koByRound.set(r, [...(koByRound.get(r) ?? []), k]);
   }
@@ -310,6 +330,39 @@ export default async function SchedulePage() {
     .sort((a, b) => a - b)
     .map((r) => ({ round: r, matches: koByRound.get(r)! }));
   const finalKnockoutRound = koRounds.at(-1)?.round ?? 0;
+  const renderPostGroupMatch = (match: KoRow) => {
+    const done =
+      match.status === "completed" || match.status === "walkover";
+    const slot = (id: string | null, source: string | null) =>
+      id
+        ? teamName(id)
+        : source
+          ? `TBA · ${sourceLabel(source)}`
+          : "Bye";
+    const inner = (
+      <div className="rounded-lg border border-black/10 p-2 text-sm">
+        <div className="flex items-center justify-between">
+          <span>{slot(match.team_a_id, match.team_a_source)}</span>
+          {done && <span className="font-semibold">{match.shots_a}</span>}
+        </div>
+        <div className="flex items-center justify-between">
+          <span>{slot(match.team_b_id, match.team_b_source)}</span>
+          {done && <span className="font-semibold">{match.shots_b}</span>}
+        </div>
+      </div>
+    );
+    return match.status === "pending" ? (
+      <div key={match.id}>{inner}</div>
+    ) : (
+      <Link
+        key={match.id}
+        href={`/fixture/${match.id}`}
+        className="block hover:opacity-70"
+      >
+        {inner}
+      </Link>
+    );
+  };
 
   return (
     <main className="flex flex-1 flex-col items-center px-5 py-10">
@@ -343,7 +396,7 @@ export default async function SchedulePage() {
               <p className="mt-1 text-xs">
                 Every group pairing appears once and no team is double-booked
                 across the {scheduleAudit.waveCount} group-stage time waves.
-                The knockout dependency graph is also valid.
+                The post-group dependency graph is also valid.
               </p>
             ) : (
               <ul className="mt-1 list-disc space-y-1 pl-4 text-xs">
@@ -353,13 +406,14 @@ export default async function SchedulePage() {
               </ul>
             )}
             <p className="mt-2 border-t border-current/10 pt-2 text-xs">
-              Planned minimum: about {durationLabel} including the knockout,
-              before deciders, changeovers or overruns.
+              Planned minimum: about {durationLabel} including the knockout
+              {projectedBowlOff ? " and bonus bowl-off" : ""}, before
+              deciders, changeovers or overruns.
             </p>
             <p className="mt-1 text-xs">
               Progress: {groupDone}/{fixtures.length} group games
               {koFixtures.length > 0
-                ? ` · ${knockoutDone}/${koFixtures.length} knockout games`
+                ? ` · ${postGroupDone}/${koFixtures.length} post-group games`
                 : ""}
             </p>
           </section>
@@ -448,6 +502,33 @@ export default async function SchedulePage() {
               );
             })}
 
+            {(bowlOffFixtures.length > 0 || projectedBowlOff) && (
+              <section className="rounded-2xl bg-brand/5 p-4 ring-1 ring-brand/20">
+                <h2 className="text-sm font-semibold text-brand-dark">
+                  Bonus bowl-off · guaranteed third game
+                </h2>
+                <p className="mt-1 text-xs text-foreground/60">
+                  Second and third in Group{" "}
+                  {projectedBowlOff?.groupLabel ?? "—"} play on the spare rink
+                  alongside the semi-finals. This does not affect the
+                  championship.
+                </p>
+                <div className="mt-3 space-y-2">
+                  {bowlOffFixtures.length > 0 ? (
+                    bowlOffFixtures.map(renderPostGroupMatch)
+                  ) : projectedBowlOff ? (
+                    <div className="rounded-lg border border-brand/20 bg-white/70 p-2 text-sm">
+                      <div>{sourceLabel(projectedBowlOff.teamASource)}</div>
+                      <div className="my-0.5 text-center text-foreground/30">
+                        v
+                      </div>
+                      <div>{sourceLabel(projectedBowlOff.teamBSource)}</div>
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+            )}
+
             <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
               <h2 className="text-sm font-semibold">Knockout draw</h2>
               {koRounds.length > 0 ? (
@@ -461,52 +542,7 @@ export default async function SchedulePage() {
                         )}
                       </h3>
                       <div className="mt-1 space-y-2">
-                        {round.matches.map((k) => {
-                          const done =
-                            k.status === "completed" || k.status === "walkover";
-                          const slot = (
-                            id: string | null,
-                            source: string | null,
-                          ) =>
-                            id
-                              ? teamName(id)
-                              : source
-                                ? `TBA · ${sourceLabel(source)}`
-                                : "Bye";
-                          const slotA = slot(k.team_a_id, k.team_a_source);
-                          const slotB = slot(k.team_b_id, k.team_b_source);
-                          const inner = (
-                            <div className="rounded-lg border border-black/10 p-2 text-sm">
-                              <div className="flex items-center justify-between">
-                                <span>{slotA}</span>
-                                {done && (
-                                  <span className="font-semibold">
-                                    {k.shots_a}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <span>{slotB}</span>
-                                {done && (
-                                  <span className="font-semibold">
-                                    {k.shots_b}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                          return k.status === "pending" ? (
-                            <div key={k.id}>{inner}</div>
-                          ) : (
-                            <Link
-                              key={k.id}
-                              href={`/fixture/${k.id}`}
-                              className="block hover:opacity-70"
-                            >
-                              {inner}
-                            </Link>
-                          );
-                        })}
+                        {round.matches.map(renderPostGroupMatch)}
                       </div>
                     </div>
                   ))}
