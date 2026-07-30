@@ -10,7 +10,10 @@ import {
   qualificationTieAtCutoff,
   type TeamStanding,
 } from "@/lib/domain/standings";
-import { buildBracket } from "@/lib/domain/bracket";
+import {
+  buildBracket,
+  knockoutRoundName,
+} from "@/lib/domain/bracket";
 import {
   auditGroupSchedule,
   auditKnockoutSchedule,
@@ -77,14 +80,6 @@ function projectedSlot(s: string | null): string {
   if (!s) return "—";
   if (s.startsWith("W:")) return `Winner ${s.slice(2)}`;
   return s;
-}
-
-function koRoundName(matchCount: number): string {
-  const teams = matchCount * 2;
-  if (teams === 2) return "Final";
-  if (teams === 4) return "Semi-finals";
-  if (teams === 8) return "Quarter-finals";
-  return `Round of ${teams}`;
 }
 
 export default async function SchedulePage() {
@@ -314,6 +309,7 @@ export default async function SchedulePage() {
   const koRounds = [...koByRound.keys()]
     .sort((a, b) => a - b)
     .map((r) => ({ round: r, matches: koByRound.get(r)! }));
+  const finalKnockoutRound = koRounds.at(-1)?.round ?? 0;
 
   return (
     <main className="flex flex-1 flex-col items-center px-5 py-10">
@@ -459,7 +455,10 @@ export default async function SchedulePage() {
                   {koRounds.map((round) => (
                     <div key={round.round}>
                       <h3 className="text-xs font-semibold text-foreground/60">
-                        {koRoundName(round.matches.length)}
+                        {knockoutRoundName(
+                          round.round,
+                          finalKnockoutRound,
+                        )}
                       </h3>
                       <div className="mt-1 space-y-2">
                         {round.matches.map((k) => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildBracket } from "./bracket";
+import { buildBracket, knockoutRoundName } from "./bracket";
 
 describe("buildBracket", () => {
   it("returns nothing for fewer than 2 qualifiers", () => {
@@ -156,5 +156,18 @@ describe("buildBracket", () => {
         ).toBe(true);
       }
     }
+  });
+});
+
+describe("knockoutRoundName", () => {
+  it("does not mistake a bye-reduced semi-final for the final", () => {
+    expect(knockoutRoundName(1, 2)).toBe("Semi-finals");
+    expect(knockoutRoundName(2, 2)).toBe("Final");
+  });
+
+  it("names every round in an eight-slot bracket", () => {
+    expect(knockoutRoundName(1, 3)).toBe("Quarter-finals");
+    expect(knockoutRoundName(2, 3)).toBe("Semi-finals");
+    expect(knockoutRoundName(3, 3)).toBe("Final");
   });
 });

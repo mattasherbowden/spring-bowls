@@ -38,6 +38,21 @@ function roundName(count: number): string {
   return `Round of ${count}`;
 }
 
+/**
+ * Name a persisted knockout round from its position in the dependency graph.
+ * Saved brackets omit one-sided bye fixtures, so the number of stored matches
+ * cannot be used to infer the round (a three-team semi-final stores one match,
+ * not two).
+ */
+export function knockoutRoundName(
+  roundNumber: number,
+  finalRoundNumber: number,
+): string {
+  const round = Math.max(1, Math.floor(roundNumber));
+  const finalRound = Math.max(round, Math.floor(finalRoundNumber));
+  return roundName(2 ** (finalRound - round + 1));
+}
+
 // The group a qualifier label belongs to — "A1" -> "A", "B2" -> "B".
 function groupOf(label: string): string {
   return label.replace(/\d+$/, "");
