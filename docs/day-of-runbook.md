@@ -11,6 +11,10 @@ day.
   add every final team, and only then generate the draw. This preserves the
   owner, helper accounts and event-page details while removing all test
   fixtures, scores, votes and player logins.
+- Set **Fixtures go live at** to `13:00` in the tournament wizard. Generating
+  the draw publishes a locked preview: players can log in, see their first and
+  later games, browse their group and the full draw, but cannot enter a score,
+  record a walkover or vote.
 - Prefer doing the final roster on Friday. If Saturday-morning changes are
   unavoidable, make them before generating the draw; the roster locks as soon
   as the live fixtures are created. Before that point, use **Edit** beside a
@@ -25,7 +29,7 @@ day.
 - Deploy the latest `main` and confirm the deployment includes migration
   `0018_day_of_hardening.sql`, `0019_atomic_draw.sql`, and
   `0020_exclude_admin_nominees.sql` through
-  `0026_owner_coolest_kiwi_only.sql`.
+  `0027_fixture_preview.sql`.
 - Open `/api/warm` on the production domain. It should return `{"ok":true}`.
 - In Supabase, confirm the project says **Active**. Free projects with too
   little database activity can pause after seven days; the app now makes a
@@ -60,6 +64,13 @@ day.
 
 ## When guests arrive
 
+- Keep the tournament in preview while people arrive and log in. Their pages
+  prominently say **Fixtures go live at 1:00pm**, but the draw and group layout
+  are already available.
+- At 1:00pm, the owner presses **Start tournament — open fixtures & Bowl
+  voting**. Confirm only when everyone is ready: score entry and Bowl of the
+  Day voting open immediately. The other awards remain closed until the
+  separate ceremony-voting control is used later.
 - Ask guests to use mobile data for the first login if the venue Wi-Fi is
   crowded. Once signed in, either connection is fine.
 - If login says lots of people are signing in, wait one minute rather than
@@ -137,14 +148,15 @@ These are event-policy choices rather than safe assumptions for the software:
    deliberately deletes the entire tournament and should only be used before
    the final event draw.
 
-## Verified on 25 July 2026
+## Verified on 30 July 2026
 
 - The generated draw is property-tested for 2–40 teams, group targets 3–5,
   top-one/top-two qualification, and 1–6 rinks. Bracket dependency properties
   are checked for every 2–16 qualifier field.
-- 322 unit/property tests passed.
+- 337 unit/property tests passed.
 - TypeScript, ESLint, and the production build passed.
 - Live Supabase smoke tests passed for player isolation, standalone helper
-  access, fixture-write isolation, racing result locks, and voting closure.
+  access, fixture-write isolation, racing result locks, preview voting locks,
+  and voting closure.
 - Mobile browser checks passed at 390 px width for landing, login, helper home,
-  schedule, and score entry.
+  schedule, score entry, and the locked tournament preview.

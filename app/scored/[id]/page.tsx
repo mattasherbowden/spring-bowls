@@ -9,6 +9,7 @@ import {
 } from "@/lib/supabase/query-error";
 import {
   isAwardVotingOpen,
+  type PlayStatus,
   type TournamentStatus,
   type VotingStatus,
 } from "@/lib/domain/voting";
@@ -39,7 +40,7 @@ export default async function ScoredPage({
       .maybeSingle(),
     admin
       .from("tournament")
-      .select("status, voting_status")
+      .select("status, voting_status, play_status")
       .neq("status", "archived")
       .limit(1)
       .maybeSingle(),
@@ -54,6 +55,7 @@ export default async function ScoredPage({
         tournament.voting_status as VotingStatus,
         "bowl_of_the_day",
         tournament.status as TournamentStatus,
+        tournament.play_status as PlayStatus,
       )
     : false;
 

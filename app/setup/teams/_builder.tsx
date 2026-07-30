@@ -72,8 +72,8 @@ export function TeamBuilder({
         )}
         {rosterLocked ? (
           <p className="mt-3 text-xs font-medium text-brand-dark">
-            {teams.length} team{teams.length === 1 ? "" : "s"} in the live draw —
-            roster locked.
+            {teams.length} team{teams.length === 1 ? "" : "s"} in the published
+            draw — roster locked.
           </p>
         ) : teams.length < plannedTeams ? (
           <p className="mt-3 text-xs text-foreground/50">
@@ -126,11 +126,11 @@ export function TeamBuilder({
       {rosterLocked ? (
         <div className="rounded-2xl bg-amber-50 p-5 text-center ring-1 ring-amber-200">
           <p className="text-sm font-semibold text-amber-900">
-            Roster locked — the draw is live
+            Roster locked — the draw is published
           </p>
           <p className="mt-1 text-xs text-amber-800">
-            Adding a team now would leave them without fixtures. Use a walkover
-            if someone cannot play.
+            Adding a team now would leave them without fixtures. Scores remain
+            locked until the organiser starts play.
           </p>
         </div>
       ) : !atLimit || addExtra ? (

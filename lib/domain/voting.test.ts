@@ -38,19 +38,42 @@ describe("buildPlayerVotingLabels", () => {
 
 describe("isAwardVotingOpen", () => {
   it("keeps Bowl of the Day open before ceremony voting starts", () => {
-    expect(isAwardVotingOpen("pending", "bowl_of_the_day", "live")).toBe(true);
-    expect(isAwardVotingOpen("pending", "best_dressed", "live")).toBe(false);
-    expect(isAwardVotingOpen("pending", "bowl_of_the_day", "setup")).toBe(false);
+    expect(
+      isAwardVotingOpen("pending", "bowl_of_the_day", "live", "open"),
+    ).toBe(true);
+    expect(
+      isAwardVotingOpen("pending", "best_dressed", "live", "open"),
+    ).toBe(false);
+    expect(
+      isAwardVotingOpen("pending", "bowl_of_the_day", "setup", "open"),
+    ).toBe(false);
   });
 
   it("opens every award together for ceremony voting", () => {
-    expect(isAwardVotingOpen("open", "bowl_of_the_day", "live")).toBe(true);
-    expect(isAwardVotingOpen("open", "best_dressed", "live")).toBe(true);
+    expect(
+      isAwardVotingOpen("open", "bowl_of_the_day", "live", "open"),
+    ).toBe(true);
+    expect(
+      isAwardVotingOpen("open", "best_dressed", "live", "open"),
+    ).toBe(true);
   });
 
   it("closes every award when winners are revealed", () => {
-    expect(isAwardVotingOpen("closed", "bowl_of_the_day", "live")).toBe(false);
-    expect(isAwardVotingOpen("closed", "best_dressed", "live")).toBe(false);
+    expect(
+      isAwardVotingOpen("closed", "bowl_of_the_day", "live", "open"),
+    ).toBe(false);
+    expect(
+      isAwardVotingOpen("closed", "best_dressed", "live", "open"),
+    ).toBe(false);
+  });
+
+  it("keeps every award locked while fixtures are only a preview", () => {
+    expect(
+      isAwardVotingOpen("pending", "bowl_of_the_day", "live", "preview"),
+    ).toBe(false);
+    expect(
+      isAwardVotingOpen("open", "best_dressed", "live", "preview"),
+    ).toBe(false);
   });
 });
 

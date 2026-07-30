@@ -13,6 +13,7 @@ import {
 import {
   buildPlayerVotingLabels,
   isAwardVotingOpen,
+  type PlayStatus,
   type TournamentStatus,
   type VotingStatus,
 } from "@/lib/domain/voting";
@@ -41,7 +42,7 @@ export default async function ResultsPage() {
   const admin = createAdminClient();
   const { data: tournament, error: tournamentError } = await admin
     .from("tournament")
-    .select("id, status, voting_status")
+    .select("id, status, voting_status, play_status")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
@@ -53,6 +54,7 @@ export default async function ResultsPage() {
     status,
     "bowl_of_the_day",
     tournament.status as TournamentStatus,
+    tournament.play_status as PlayStatus,
   );
 
   const [playersResult, teamsResult, votesResult] = await Promise.all([

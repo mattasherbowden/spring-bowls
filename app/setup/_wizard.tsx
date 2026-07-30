@@ -104,6 +104,7 @@ export function SetupWizard() {
   const [advance, setAdvance] = useState<1 | 2>(2);
   const [preferredGroupSize, setGroupSize] = useState(4);
   const [start, setStart] = useState("10:00");
+  const [fixturesOpen, setFixturesOpen] = useState("13:00");
   const [createState, createAction, creating] = useActionState(
     createTournament,
     {} as CreateState,
@@ -192,6 +193,21 @@ export function SetupWizard() {
             className="mt-2 block rounded-lg border border-black/10 bg-white px-3 py-2 text-base text-black"
           />
         </label>
+        <label className="block">
+          <span className="text-sm font-medium">
+            Fixtures go live at
+          </span>
+          <input
+            type="time"
+            value={fixturesOpen}
+            onChange={(e) => setFixturesOpen(e.target.value)}
+            className="mt-2 block rounded-lg border border-black/10 bg-white px-3 py-2 text-base text-black"
+          />
+          <span className="mt-1 block text-xs text-foreground/50">
+            Players see this time in the preview. You still press the start
+            button when you are ready.
+          </span>
+        </label>
       </div>
 
       <div className="rounded-2xl bg-brand/5 p-5 ring-1 ring-brand/15">
@@ -279,6 +295,11 @@ export function SetupWizard() {
           value={preferredGroupSize}
         />
         <input type="hidden" name="startTime" value={start} />
+        <input
+          type="hidden"
+          name="fixturesOpenTime"
+          value={fixturesOpen}
+        />
         <button
           type="submit"
           disabled={creating}

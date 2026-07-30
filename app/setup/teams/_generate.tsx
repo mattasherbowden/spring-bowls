@@ -16,7 +16,7 @@ export function GenerateScheduleButton({ ready }: { ready: boolean }) {
       onSubmit={(event) => {
         if (
           !window.confirm(
-            "Generate the draw now? This locks the roster and creates the live fixture list.",
+            "Generate the draw now? This locks the roster and publishes a preview. Scores and voting stay locked until you start the tournament.",
           )
         ) {
           event.preventDefault();
@@ -29,7 +29,7 @@ export function GenerateScheduleButton({ ready }: { ready: boolean }) {
         disabled={pending || !ready}
         className="w-full rounded-lg bg-brand px-4 py-3 text-base font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
       >
-        {pending ? "Drawing groups…" : "Generate schedule — draw the groups"}
+        {pending ? "Drawing groups…" : "Publish preview — draw the groups"}
       </button>
       {!ready && (
         <p className="text-center text-xs text-foreground/50">

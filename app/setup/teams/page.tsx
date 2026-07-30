@@ -9,6 +9,8 @@ import {
   throwIfAuthUnavailable,
   throwIfSupabaseError,
 } from "@/lib/supabase/query-error";
+import { formatFixtureOpenTime, isPlayOpen } from "@/lib/domain/play-state";
+import { StartTournamentButton } from "../../_components/start-tournament-button";
 
 export default async function TeamsPage() {
   const supabase = await createClient();
@@ -29,7 +31,9 @@ export default async function TeamsPage() {
 
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournament")
-    .select("id, name, team_size, planned_teams, status")
+    .select(
+      "id, name, team_size, planned_teams, status, play_status, fixtures_open_time",
+    )
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
@@ -80,12 +84,29 @@ export default async function TeamsPage() {
           {tournament.status === "setup" ? (
             <GenerateScheduleButton ready={(teams?.length ?? 0) >= 2} />
           ) : (
-            <Link
-              href="/schedule"
-              className="block w-full rounded-lg bg-brand px-4 py-3 text-center text-base font-semibold text-white hover:bg-brand-dark"
-            >
-              View the schedule
-            </Link>
+            <div className="space-y-3">
+              {!isPlayOpen(tournament.play_status) && (
+                <section className="rounded-2xl bg-brand/10 p-4 text-center ring-1 ring-brand/25">
+                  <p className="font-semibold text-brand-dark">
+                    Preview is ready to share
+                  </p>
+                  <p className="mt-1 text-xs text-foreground/60">
+                    Players can see the draw, but scores and voting are locked.
+                    Their pages say fixtures go live at{" "}
+                    {formatFixtureOpenTime(tournament.fixtures_open_time)}.
+                  </p>
+                  <div className="mt-3">
+                    <StartTournamentButton />
+                  </div>
+                </section>
+              )}
+              <Link
+                href="/schedule"
+                className="block w-full rounded-lg bg-brand px-4 py-3 text-center text-base font-semibold text-white hover:bg-brand-dark"
+              >
+                View the schedule
+              </Link>
+            </div>
           )}
         </div>
 

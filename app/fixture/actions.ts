@@ -8,6 +8,7 @@ import { fixtureResult } from "@/lib/domain/fixture";
 import { validateScoreEntry } from "@/lib/domain/score-entry";
 import { resolveKnockout } from "@/lib/server/knockout";
 import { isBonusBowlOff } from "@/lib/domain/consolation";
+import { isPlayOpen } from "@/lib/domain/play-state";
 
 export type ScoreState = { error?: string };
 
@@ -50,11 +51,17 @@ export async function submitScore(
 
   const { data: tournament, error: tournamentError } = await admin
     .from("tournament")
-    .select("ends_per_game")
+    .select("ends_per_game, play_status")
     .eq("id", fixture.tournament_id)
     .maybeSingle();
   if (tournamentError || !tournament) {
     return { error: "Could not load the scoring rules. Refresh and try again." };
+  }
+  if (!isPlayOpen(tournament.play_status)) {
+    return {
+      error:
+        "Score entry is locked until the organiser starts the tournament.",
+    };
   }
   const validated = validateScoreEntry(rawEnds, tournament.ends_per_game);
   if ("error" in validated) return { error: validated.error };
@@ -289,6 +296,21 @@ export async function walkoverFixture(
   if (!fixture) return { error: "Game not found." };
   if (!OPEN.includes(fixture.status)) {
     return { error: "This game's score is already in." };
+  }
+
+  const { data: tournament, error: tournamentError } = await admin
+    .from("tournament")
+    .select("play_status")
+    .eq("id", fixture.tournament_id)
+    .maybeSingle();
+  if (tournamentError || !tournament) {
+    return { error: "Could not load the tournament. Refresh and try again." };
+  }
+  if (!isPlayOpen(tournament.play_status)) {
+    return {
+      error:
+        "Walkovers are locked until the organiser starts the tournament.",
+    };
   }
 
   const { data: prof } = await admin

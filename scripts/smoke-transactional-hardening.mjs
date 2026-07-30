@@ -70,13 +70,18 @@ try {
   const tournament = await client.query(
     `
       insert into public.tournament
-        (name, status, team_size, created_by)
-      values ('Transactional smoke', 'setup', 2, $1)
-      returning id
+        (name, status, team_size, created_by, play_status, fixtures_open_time)
+      values ('Transactional smoke', 'setup', 2, $1, 'preview', '13:00')
+      returning id, play_status, fixtures_open_time
     `,
     [ownerId],
   );
   const tournamentId = tournament.rows[0].id;
+  check(
+    "new draws can be published in a locked preview state",
+    tournament.rows[0].play_status === "preview" &&
+      tournament.rows[0].fixtures_open_time === "13:00",
+  );
   const submitKey = "8be2538f-8cc4-4f0c-a8f0-0b2b1dca59b8";
   await client.query(
     `
@@ -209,6 +214,35 @@ try {
   );
   await client.query(
     "update public.tournament set status = 'live' where id = $1",
+    [tournamentId],
+  );
+  let previewVoteRejected = false;
+  await client.query("savepoint preview_vote");
+  try {
+    await client.query(
+      `
+        insert into public.award_vote
+          (tournament_id, award_key, voter_id, target_type, target_id)
+        values ($1, 'bowl_of_the_day', $2, 'player', $3)
+      `,
+      [
+        tournamentId,
+        guestProfiles.rows[0].profile_id,
+        ownerPlayer.rows[0].id,
+      ],
+    );
+  } catch (error) {
+    previewVoteRejected =
+      error?.code === "P0001" && /voting_closed/.test(error?.message ?? "");
+    await client.query("rollback to savepoint preview_vote");
+  }
+  await client.query("release savepoint preview_vote");
+  check(
+    "the database rejects Bowl of the Day votes during fixture preview",
+    previewVoteRejected,
+  );
+  await client.query(
+    "update public.tournament set play_status = 'open' where id = $1",
     [tournamentId],
   );
   const pendingBowlVote = await client.query(

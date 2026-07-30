@@ -29,6 +29,11 @@ import {
   throwIfAuthUnavailable,
   throwIfSupabaseError,
 } from "@/lib/supabase/query-error";
+import {
+  formatFixtureOpenTime,
+  isPlayOpen,
+} from "@/lib/domain/play-state";
+import { PlayPreviewBanner } from "../_components/play-preview-banner";
 
 type PlayerLite = { display_name: string; nationality: string | null };
 type TeamRow = {
@@ -97,7 +102,9 @@ export default async function SchedulePage() {
 
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournament")
-    .select("id, name, advance, rink_count, ends_per_game, minutes_per_end")
+    .select(
+      "id, name, advance, rink_count, ends_per_game, minutes_per_end, play_status, fixtures_open_time",
+    )
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
@@ -378,6 +385,17 @@ export default async function SchedulePage() {
             <LiveRefresh />
           </div>
         </header>
+
+        {!isPlayOpen(tournament.play_status) && (
+          <div className="mt-5">
+            <PlayPreviewBanner
+              openTimeLabel={formatFixtureOpenTime(
+                tournament.fixtures_open_time,
+              )}
+              isOwner={isOwner}
+            />
+          </div>
+        )}
 
         {canManage && fixtures.length > 0 && (
           <section

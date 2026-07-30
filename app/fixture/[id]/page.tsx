@@ -8,6 +8,10 @@ import {
   throwIfSupabaseError,
 } from "@/lib/supabase/query-error";
 import { postGroupMatchLabel } from "@/lib/domain/consolation";
+import {
+  formatFixtureOpenTime,
+  isPlayOpen,
+} from "@/lib/domain/play-state";
 
 type TeamRow = {
   id: string;
@@ -55,7 +59,7 @@ export default async function FixturePage({
 
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournament")
-    .select("ends_per_game")
+    .select("ends_per_game, play_status, fixtures_open_time")
     .eq("id", fixture.tournament_id)
     .maybeSingle();
   throwIfSupabaseError(tournamentError, "fixture rules");
@@ -80,6 +84,7 @@ export default async function FixturePage({
     !!prof?.is_owner || !!prof?.is_admin || me?.role === "admin";
   const done = fixture.status === "completed" || fixture.status === "walkover";
   const bothSet = !!fixture.team_a_id && !!fixture.team_b_id;
+  const playOpen = isPlayOpen(tournament?.play_status);
 
   return (
     <main className="flex flex-1 flex-col items-center px-5 py-10">
@@ -122,6 +127,18 @@ export default async function FixturePage({
             )}
             {isAdmin && <UnlockButton fixtureId={fixture.id} />}
           </div>
+        ) : !playOpen ? (
+          <div className="mt-6 rounded-2xl bg-amber-50 p-5 text-center ring-1 ring-amber-200">
+            <p className="text-2xl">🔒</p>
+            <p className="mt-1 font-semibold text-amber-950">
+              Score entry opens at{" "}
+              {formatFixtureOpenTime(tournament?.fixtures_open_time)}
+            </p>
+            <p className="mt-1 text-sm text-amber-900/70">
+              This fixture is available to preview. The organiser will unlock
+              scoring when play begins.
+            </p>
+          </div>
         ) : !bothSet ? (
           <p className="mt-6 text-center text-sm text-foreground/60">
             This game is waiting for both teams to be decided.
@@ -138,7 +155,7 @@ export default async function FixturePage({
             This game hasn&apos;t been played yet.
           </p>
         )}
-        {isAdmin && bothSet && !done && (
+        {playOpen && isAdmin && bothSet && !done && (
           <div className="mt-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
             <p className="text-sm font-medium">No-show? Record a walkover</p>
             <p className="mt-0.5 text-xs text-foreground/50">

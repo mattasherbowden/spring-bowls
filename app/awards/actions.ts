@@ -8,6 +8,7 @@ import {
   isAwardVotingOpen,
   isOwnerExcludedFromAward,
   OWNER_COOLEST_KIWI_MESSAGE,
+  type PlayStatus,
   type TournamentStatus,
   type VotingStatus,
 } from "@/lib/domain/voting";
@@ -35,7 +36,7 @@ export async function castVote(
   const admin = createAdminClient();
   const { data: tournament } = await admin
     .from("tournament")
-    .select("id, status, voting_status")
+    .select("id, status, voting_status, play_status")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
@@ -45,12 +46,15 @@ export async function castVote(
       tournament.voting_status as VotingStatus,
       awardKey,
       tournament.status as TournamentStatus,
+      tournament.play_status as PlayStatus,
     )
   ) {
     return {
       error:
-        awardKey === "bowl_of_the_day"
-          ? "Bowl of the Day voting has closed."
+        tournament.play_status !== "open"
+          ? "Voting is locked until the organiser starts the tournament."
+          : awardKey === "bowl_of_the_day"
+            ? "Bowl of the Day voting has closed."
           : "Ceremony voting isn't open right now.",
     };
   }
@@ -183,11 +187,17 @@ export async function setVotingStatus(
 
   const { data: tournament } = await admin
     .from("tournament")
-    .select("id")
+    .select("id, play_status")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
   if (!tournament) return { error: "No active tournament." };
+  if (tournament.play_status !== "open") {
+    return {
+      error:
+        "Voting controls stay locked until the tournament has been started.",
+    };
+  }
 
   const { data: updated, error } = await admin
     .from("tournament")

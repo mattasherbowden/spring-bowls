@@ -1,3 +1,7 @@
+import type { PlayStatus } from "./play-state";
+
+export type { PlayStatus } from "./play-state";
+
 export const OWNER_COOLEST_KIWI_MESSAGE =
   "That is kind but sorry, pick someone else — I made it so you can't vote for me.";
 
@@ -74,13 +78,16 @@ export function isAwardVotingOpen(
   status: VotingStatus,
   awardKey: string,
   tournamentStatus: TournamentStatus,
+  playStatus: PlayStatus,
 ): boolean {
-  return status === "open" ||
+  return playStatus === "open" && (
+    status === "open" ||
     (
       tournamentStatus === "live" &&
       status === "pending" &&
       awardKey === "bowl_of_the_day"
-    );
+    )
+  );
 }
 
 /** The owner opted out of Coolest Kiwi only; all other eligibility is normal. */

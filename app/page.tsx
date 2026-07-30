@@ -19,6 +19,12 @@ import {
   throwIfSupabaseError,
 } from "@/lib/supabase/query-error";
 import { postGroupMatchLabel } from "@/lib/domain/consolation";
+import {
+  formatFixtureOpenTime,
+  isPlayOpen,
+  type PlayStatus,
+} from "@/lib/domain/play-state";
+import { PlayPreviewBanner } from "./_components/play-preview-banner";
 
 type TeamLite = { id: string; name: string | null; players: { display_name: string }[] };
 type FixtureLite = {
@@ -294,7 +300,9 @@ export default async function Home() {
   throwIfSupabaseError(profileError, "current profile");
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournament")
-    .select("id, name, advance, status")
+    .select(
+      "id, name, advance, status, play_status, fixtures_open_time",
+    )
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
@@ -324,6 +332,8 @@ export default async function Home() {
           firstName={firstName}
           isOwner={!!profile?.is_owner}
           isAdmin={!!profile?.is_admin}
+          playStatus={tournament.play_status as PlayStatus}
+          fixturesOpenTime={tournament.fixtures_open_time}
         />
         <LogoutButton />
       </Shell>
@@ -355,8 +365,21 @@ export default async function Home() {
               <p className="mt-1 text-xs text-foreground/50">
                 {tournament.status === "setup"
                   ? "Next: add your teams & logins, then generate the schedule."
-                  : "It's live — players can log in and enter their scores."}
+                  : isPlayOpen(tournament.play_status)
+                    ? "Play is open — players can enter their scores."
+                    : `The preview is published — scores and voting open at ${formatFixtureOpenTime(tournament.fixtures_open_time)} when you press start.`}
               </p>
+              {tournament.status === "live" &&
+                !isPlayOpen(tournament.play_status) && (
+                  <div className="mt-4">
+                    <PlayPreviewBanner
+                      openTimeLabel={formatFixtureOpenTime(
+                        tournament.fixtures_open_time,
+                      )}
+                      isOwner
+                    />
+                  </div>
+                )}
               <div className="mt-3 flex flex-wrap gap-2">
                 <Link
                   href="/setup/teams"
@@ -464,6 +487,8 @@ async function PlayerHome({
   firstName,
   isOwner,
   isAdmin,
+  playStatus,
+  fixturesOpenTime,
 }: {
   tournamentId: string;
   advance: number;
@@ -471,8 +496,12 @@ async function PlayerHome({
   firstName: string;
   isOwner: boolean;
   isAdmin: boolean;
+  playStatus: PlayStatus;
+  fixturesOpenTime: string | null;
 }) {
   const supabase = await createClient();
+  const playOpen = isPlayOpen(playStatus);
+  const openTimeLabel = formatFixtureOpenTime(fixturesOpenTime);
 
   const { data: allTeamsData, error: allTeamsError } = await supabase
     .from("team")
@@ -656,6 +685,14 @@ async function PlayerHome({
       <div className="mt-2">
         <LiveRefresh />
       </div>
+      {!playOpen && (
+        <div className="mt-4">
+          <PlayPreviewBanner
+            openTimeLabel={openTimeLabel}
+            isOwner={isOwner}
+          />
+        </div>
+      )}
       {unresolvedQualificationTie && (
         <p className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
           Group {groupLabel} has an exact qualification tie. The knockout is
@@ -676,7 +713,9 @@ async function PlayerHome({
             ready,
           );
           const tileClass =
-            status === "live"
+            !playOpen
+              ? "rounded-2xl bg-brand/10 p-5 ring-1 ring-brand/30"
+              : status === "live"
               ? "rounded-2xl bg-brand/15 p-5 ring-2 ring-brand/50"
               : status === "waiting"
                 ? "rounded-2xl bg-amber-50 p-5 ring-1 ring-amber-200"
@@ -686,10 +725,16 @@ async function PlayerHome({
               <div className="flex items-start justify-between">
                 <span
                   className={`text-xs font-semibold uppercase tracking-wide ${
-                    status === "waiting" ? "text-amber-800" : "text-brand-dark"
+                    playOpen && status === "waiting"
+                      ? "text-amber-800"
+                      : "text-brand-dark"
                   }`}
                 >
-                  {upNext.stage === "knockout"
+                  {!playOpen
+                    ? upNext.stage === "knockout"
+                      ? `${gameLabel(upNext)} · first up`
+                      : "Your first game"
+                    : upNext.stage === "knockout"
                     ? `${gameLabel(upNext)} · next`
                     : "Up next"}
                 </span>
@@ -700,7 +745,7 @@ async function PlayerHome({
                     </div>
                     <div
                       className={`mt-0.5 font-display text-lg font-semibold ${
-                        status === "waiting"
+                        playOpen && status === "waiting"
                           ? "text-amber-900"
                           : "text-brand-dark"
                       }`}
@@ -720,7 +765,7 @@ async function PlayerHome({
                 </p>
               )}
 
-              {status === "live" && (
+              {playOpen && status === "live" && (
                 <div className="mt-3 rounded-xl bg-brand px-4 py-3 text-center shadow-sm">
                   <p className="font-display text-lg font-bold text-white">
                     {pick(LIVE_LINES)}
@@ -731,7 +776,7 @@ async function PlayerHome({
                 </div>
               )}
 
-              {status === "waiting" && aheadGame && (
+              {playOpen && status === "waiting" && aheadGame && (
                 <div className="mt-3 rounded-xl bg-amber-100 px-4 py-3 text-center ring-1 ring-amber-200">
                   <p className="font-display text-lg font-bold text-amber-900">
                     {pick(WAITING_LINES)}
@@ -769,13 +814,23 @@ async function PlayerHome({
                 </div>
               )}
 
-              {status === "unknown" && (
+              {playOpen && status === "unknown" && (
                 <p className="mt-2 text-sm font-medium text-brand-dark">
                   You&apos;re up next — head over when you&apos;re called.
                 </p>
               )}
 
-              {ready ? (
+              {!playOpen ? (
+                <>
+                  <p className="mt-3 text-base font-bold text-brand-dark">
+                    Score entry opens at {openTimeLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs text-foreground/60">
+                    Have a look around now — the organiser will unlock play on
+                    the day.
+                  </p>
+                </>
+              ) : ready ? (
                 <>
                   <p className="mt-3 text-base font-bold text-brand-dark">
                     {status === "waiting"
@@ -794,7 +849,7 @@ async function PlayerHome({
               )}
             </div>
           );
-          return ready ? (
+          return playOpen && ready ? (
             <Link className="mt-4 block" href={`/fixture/${upNext.id}`}>
               {inner}
             </Link>

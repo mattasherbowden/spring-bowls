@@ -7,6 +7,7 @@ import {
   buildPlayerVotingLabels,
   isAwardVotingOpen,
   isOwnerExcludedFromAward,
+  type PlayStatus,
   type TournamentStatus,
   type VotingStatus,
 } from "@/lib/domain/voting";
@@ -18,6 +19,11 @@ import {
   throwIfAuthUnavailable,
   throwIfSupabaseError,
 } from "@/lib/supabase/query-error";
+import { PlayPreviewBanner } from "../_components/play-preview-banner";
+import {
+  formatFixtureOpenTime,
+  isPlayOpen,
+} from "@/lib/domain/play-state";
 
 type PlayerRow = {
   id: string;
@@ -63,7 +69,9 @@ export default async function AwardsPage() {
   const admin = createAdminClient();
   const { data: tournament, error: tournamentError } = await admin
     .from("tournament")
-    .select("id, status, voting_status")
+    .select(
+      "id, status, voting_status, play_status, fixtures_open_time",
+    )
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
@@ -88,10 +96,12 @@ export default async function AwardsPage() {
   }
 
   const status = tournament.voting_status as VotingStatus;
+  const playOpen = isPlayOpen(tournament.play_status);
   const bowlOpen = isAwardVotingOpen(
     status,
     "bowl_of_the_day",
     tournament.status as TournamentStatus,
+    tournament.play_status as PlayStatus,
   );
 
   const [
@@ -266,21 +276,41 @@ export default async function AwardsPage() {
         <span className="text-xs text-foreground/50">(you control this)</span>
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
-        {status !== "open" && (
+        {playOpen && status !== "open" && (
           <VotingStatusButton to="open" label="Open all awards" />
         )}
-        {status === "open" && (
+        {playOpen && status === "open" && (
           <VotingStatusButton
             to="closed"
             label="Close voting & reveal winners"
           />
         )}
-        {status === "closed" && (
+        {playOpen && status === "closed" && (
           <VotingStatusButton to="open" label="Re-open voting" />
         )}
       </div>
     </div>
   );
+
+  if (!playOpen) {
+    return (
+      <Frame>
+        {adminBar}
+        <div className="mt-6">
+          <PlayPreviewBanner
+            openTimeLabel={formatFixtureOpenTime(
+              tournament.fixtures_open_time,
+            )}
+            isOwner={!!prof?.is_owner}
+          />
+        </div>
+        <p className="mt-4 text-center text-sm text-foreground/60">
+          Bowl of the Day will open with the fixtures. The other awards stay
+          closed until an organiser opens ceremony voting later.
+        </p>
+      </Frame>
+    );
+  }
 
   if (status === "closed") {
     return (
@@ -378,7 +408,8 @@ export default async function AwardsPage() {
             <p className="text-4xl">🗳️</p>
             <p className="mt-2 font-medium">Voting hasn&apos;t opened yet</p>
             <p className="mt-1 text-sm text-foreground/60">
-              Bowl of the Day opens automatically once the draw goes live.
+              Bowl of the Day opens automatically once the organiser starts
+              play.
             </p>
           </div>
         )}

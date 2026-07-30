@@ -15,6 +15,7 @@ import { splitIntoGroups } from "@/lib/domain/planner";
 import { drawGroups, buildGroupSchedule } from "@/lib/domain/schedule";
 import { assignPhotoPartners } from "@/lib/domain/photo";
 import { resolveKnockout } from "@/lib/server/knockout";
+import { isPlayOpen } from "@/lib/domain/play-state";
 
 const EMAIL_DOMAIN = "springbowls.local";
 
@@ -68,10 +69,74 @@ export async function createTournament(
     preferred_group_size: intField(fd, "preferredGroupSize", 4),
     planned_teams: intField(fd, "plannedTeams", 12),
     start_time: String(fd.get("startTime") || "") || null,
+    fixtures_open_time: String(fd.get("fixturesOpenTime") || "13:00"),
+    play_status: "preview",
     created_by: ownerId,
   });
   if (error) return { error: `Could not create the tournament: ${error.message}` };
   redirect("/setup/teams");
+}
+
+// ---------- start play (unlock score entry and Bowl of the Day voting) ----------
+
+export type StartPlayState = { error?: string; done?: boolean };
+
+export async function startTournamentPlay(
+  _prev: StartPlayState,
+  _fd: FormData,
+): Promise<StartPlayState> {
+  void _prev;
+  void _fd;
+  const ownerId = await currentOwnerId();
+  if (!ownerId) return { error: "Only the owner can start the tournament." };
+
+  const admin = createAdminClient();
+  const { data: tournament, error: tournamentError } = await admin
+    .from("tournament")
+    .select("id, status, play_status")
+    .neq("status", "archived")
+    .limit(1)
+    .maybeSingle();
+  if (tournamentError || !tournament) {
+    return { error: "Could not load the tournament. Refresh and try again." };
+  }
+  if (tournament.status !== "live") {
+    return { error: "Generate the draw before starting play." };
+  }
+  if (isPlayOpen(tournament.play_status)) return { done: true };
+
+  const { data: updated, error } = await admin
+    .from("tournament")
+    .update({
+      play_status: "open",
+      // A new preview should always begin with Bowl of the Day available while
+      // ceremony voting remains closed.
+      voting_status: "pending",
+    })
+    .eq("id", tournament.id)
+    .eq("play_status", "preview")
+    .select("id");
+  if (error) {
+    return {
+      error: "Could not start play — check your signal and try again.",
+    };
+  }
+  if (!updated || updated.length === 0) {
+    const { data: latest } = await admin
+      .from("tournament")
+      .select("play_status")
+      .eq("id", tournament.id)
+      .maybeSingle();
+    if (!isPlayOpen(latest?.play_status)) {
+      return { error: "Play was not opened. Refresh and try again." };
+    }
+  }
+
+  revalidatePath("/");
+  revalidatePath("/schedule");
+  revalidatePath("/awards");
+  revalidatePath("/setup/teams");
+  return { done: true };
 }
 
 // ---------- add a team (creates player logins) ----------
