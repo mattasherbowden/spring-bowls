@@ -7,6 +7,7 @@ import {
 } from "@/lib/domain/standings";
 import { buildBracket } from "@/lib/domain/bracket";
 import { bonusBowlOff } from "@/lib/domain/consolation";
+import { buildPostGroupPlacements } from "@/lib/domain/post-group-schedule";
 import type { Fixture } from "@/lib/domain/types";
 
 export type KnockoutResolution = { error?: string };
@@ -18,7 +19,7 @@ export async function resolveKnockout(
   tournamentId: string,
 ): Promise<KnockoutResolution> {
   const koSelect =
-    "id, match_code, team_a_source, team_b_source, team_a_id, team_b_id, status, winner_team_id";
+    "id, match_code, round, team_a_source, team_b_source, team_a_id, team_b_id, status, winner_team_id";
 
   // These four reads are independent — fetch them together to cut round-trips.
   const [tResult, teamsResult, groupFxResult, koResult, tiebreakResult] =
@@ -243,7 +244,14 @@ export async function resolveKnockout(
     };
   }
 
-  let scheduledCount = knockout.filter((k) => k.status !== "pending").length;
+  const placements = buildPostGroupPlacements(
+    knockout.map((fixture) => ({
+      id: fixture.id,
+      matchCode: fixture.match_code,
+      round: fixture.round,
+    })),
+    rinkCount,
+  );
 
   const writes = [];
   for (const k of knockout) {
@@ -258,10 +266,12 @@ export async function resolveKnockout(
     if (a && a !== k.team_a_id) update.team_a_id = a;
     if (b && b !== k.team_b_id) update.team_b_id = b;
     if (a && b && k.status === "pending") {
+      const placement = placements.get(k.id);
       update.status = "scheduled";
-      update.rink = (scheduledCount % rinkCount) + 1;
-      update.order_index = 1000 + scheduledCount;
-      scheduledCount++;
+      if (placement) {
+        update.rink = placement.rink;
+        update.order_index = placement.order;
+      }
     }
     if (Object.keys(update).length > 0) {
       writes.push(
