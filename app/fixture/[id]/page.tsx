@@ -7,22 +7,13 @@ import {
   throwIfAuthUnavailable,
   throwIfSupabaseError,
 } from "@/lib/supabase/query-error";
-import { isBonusBowlOff } from "@/lib/domain/consolation";
+import { postGroupMatchLabel } from "@/lib/domain/consolation";
 
 type TeamRow = {
   id: string;
   name: string | null;
   players: { display_name: string }[];
 };
-
-function koLabel(code: string | null): string {
-  if (!code) return "Knockout";
-  if (isBonusBowlOff(code)) return "Bonus bowl-off";
-  if (code.startsWith("QF")) return "Quarter-final";
-  if (code.startsWith("SF")) return "Semi-final";
-  if (code.startsWith("R")) return "Knockout";
-  return "Final";
-}
 
 export default async function FixturePage({
   params,
@@ -105,7 +96,7 @@ export default async function FixturePage({
           </div>
           <p className="mt-3 text-xs font-medium uppercase tracking-wide text-foreground/50">
             {fixture.stage === "knockout"
-              ? koLabel(fixture.match_code)
+              ? postGroupMatchLabel(fixture.match_code)
               : `Group ${fixture.group_label} · Round ${fixture.round}`}{" "}
             · Rink {fixture.rink}
           </p>

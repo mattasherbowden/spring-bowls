@@ -43,3 +43,12 @@ export function bonusBowlOff(
 export function isBonusBowlOff(matchCode: string | null): boolean {
   return matchCode === BONUS_BOWL_OFF_CODE;
 }
+
+export function postGroupMatchLabel(matchCode: string | null): string {
+  if (isBonusBowlOff(matchCode)) return "Bonus bowl-off";
+  if (!matchCode) return "Knockout";
+  if (matchCode.startsWith("QF")) return "Quarter-final";
+  if (matchCode.startsWith("SF")) return "Semi-final";
+  if (matchCode.startsWith("F")) return "Final";
+  return "Knockout";
+}

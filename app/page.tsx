@@ -18,7 +18,7 @@ import {
   throwIfAuthUnavailable,
   throwIfSupabaseError,
 } from "@/lib/supabase/query-error";
-import { isBonusBowlOff } from "@/lib/domain/consolation";
+import { postGroupMatchLabel } from "@/lib/domain/consolation";
 
 type TeamLite = { id: string; name: string | null; players: { display_name: string }[] };
 type FixtureLite = {
@@ -592,7 +592,7 @@ async function PlayerHome({
   const isDone = (f: FixtureLite) =>
     f.status === "completed" || f.status === "walkover";
   const gameLabel = (f: FixtureLite): string =>
-    isBonusBowlOff(f.match_code) ? "Bonus bowl-off" : "Knockout";
+    postGroupMatchLabel(f.match_code);
   const played = myFixtures.filter(isDone);
   const unplayed = myFixtures.filter((f) => !isDone(f));
   const upNext = unplayed[0];

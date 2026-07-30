@@ -3,6 +3,7 @@ import {
   BONUS_BOWL_OFF_CODE,
   bonusBowlOff,
   isBonusBowlOff,
+  postGroupMatchLabel,
 } from "./consolation";
 
 describe("bonusBowlOff", () => {
@@ -56,5 +57,16 @@ describe("isBonusBowlOff", () => {
     expect(isBonusBowlOff(BONUS_BOWL_OFF_CODE)).toBe(true);
     expect(isBonusBowlOff("SF1")).toBe(false);
     expect(isBonusBowlOff(null)).toBe(false);
+  });
+});
+
+describe("postGroupMatchLabel", () => {
+  it("gives player-facing names to every finals fixture", () => {
+    expect(postGroupMatchLabel(BONUS_BOWL_OFF_CODE)).toBe("Bonus bowl-off");
+    expect(postGroupMatchLabel("QF2")).toBe("Quarter-final");
+    expect(postGroupMatchLabel("SF1")).toBe("Semi-final");
+    expect(postGroupMatchLabel("F1")).toBe("Final");
+    expect(postGroupMatchLabel("R16")).toBe("Knockout");
+    expect(postGroupMatchLabel(null)).toBe("Knockout");
   });
 });
