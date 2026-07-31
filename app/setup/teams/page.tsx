@@ -34,7 +34,7 @@ export default async function TeamsPage() {
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournament")
     .select(
-      "id, name, team_size, planned_teams, rink_count, status, play_status, fixtures_open_time",
+      "id, name, team_size, planned_teams, rink_count, status, play_status, voting_status, fixtures_open_time",
     )
     .neq("status", "archived")
     .limit(1)
@@ -79,6 +79,12 @@ export default async function TeamsPage() {
             plannedTeams={tournament.planned_teams}
             teams={teams ?? []}
             rosterLocked={tournament.status !== "setup"}
+            teamEditingAllowed={
+              tournament.status === "setup" ||
+              (tournament.status === "live" &&
+                !isPlayOpen(tournament.play_status) &&
+                tournament.voting_status === "pending")
+            }
           />
         </div>
 

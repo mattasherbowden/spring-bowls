@@ -240,6 +240,12 @@ try {
       p_tournament_id: tournamentId,
       p_rink_count: 4,
     }),
+    outClient.rpc("update_published_preview_team", {
+      p_tournament_id: tournamentId,
+      p_team_id: team.id,
+      p_team_name: "Hax",
+      p_players: [],
+    }),
     outClient.rpc("create_setup_team", {
       p_tournament_id: tournamentId,
       p_team_name: "Hax",

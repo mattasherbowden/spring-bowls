@@ -458,7 +458,7 @@ export async function addTeam(
   };
 }
 
-// ---------- edit/remove a team before the draw ----------
+// ---------- edit/remove a team before the draw; rename during preview ----------
 
 type TeamEditPlayer = {
   id: string;
@@ -526,32 +526,53 @@ export async function updateTeam(
   const admin = createAdminClient();
   const { data: tournament, error: tournamentError } = await admin
     .from("tournament")
-    .select("team_size, status")
+    .select("team_size, status, play_status, voting_status")
     .eq("id", tournamentId)
     .maybeSingle();
   if (tournamentError || !tournament) {
     return { error: "Could not load the tournament. Refresh and try again." };
   }
-  if (tournament.status !== "setup") {
-    return { error: "The draw is live, so the roster is locked." };
-  }
   if (parsed.players.length !== tournament.team_size) {
     return { error: `This team must contain ${tournament.team_size} players.` };
   }
 
-  const { error } = await admin.rpc("update_setup_team", {
-    p_tournament_id: tournamentId,
-    p_team_id: teamId,
-    p_team_name: teamName,
-    p_players: parsed.players.map((player) => ({
-      id: player.id,
-      display_name: player.displayName,
-      nationality: player.nationality,
-    })),
-  });
+  const setupEdit = tournament.status === "setup";
+  const previewEdit =
+    tournament.status === "live" &&
+    tournament.play_status === "preview" &&
+    tournament.voting_status === "pending";
+  if (!setupEdit && !previewEdit) {
+    return {
+      error:
+        "Play or voting has started, so player details can no longer be changed here.",
+    };
+  }
+
+  const { error } = await admin.rpc(
+    setupEdit ? "update_setup_team" : "update_published_preview_team",
+    {
+      p_tournament_id: tournamentId,
+      p_team_id: teamId,
+      p_team_name: teamName,
+      p_players: parsed.players.map((player) => ({
+        id: player.id,
+        display_name: player.displayName,
+        nationality: player.nationality,
+      })),
+    },
+  );
   if (error) {
-    if (/roster_locked/.test(error.message)) {
-      return { error: "The draw just went live, so this edit was not saved." };
+    if (/roster_locked|preview_roster_locked/.test(error.message)) {
+      return {
+        error:
+          "The tournament state changed while you were editing, so nothing was saved. Refresh and try again.",
+      };
+    }
+    if (/preview_roster_activity_exists/.test(error.message)) {
+      return {
+        error:
+          "A score or vote now exists, so this replacement was not saved.",
+      };
     }
     return {
       error: `Nothing was changed. Refresh and try again (${error.message}).`,
@@ -560,6 +581,9 @@ export async function updateTeam(
   revalidatePath("/setup/teams");
   revalidatePath("/setup/logins");
   revalidatePath("/");
+  revalidatePath("/schedule");
+  revalidatePath("/awards");
+  revalidatePath("/photo");
   return { done: true };
 }
 

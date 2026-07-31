@@ -33,6 +33,7 @@ export function TeamBuilder({
   plannedTeams,
   teams,
   rosterLocked,
+  teamEditingAllowed,
 }: {
   tournamentId: string;
   submissionKey: string;
@@ -40,6 +41,7 @@ export function TeamBuilder({
   plannedTeams: number;
   teams: TeamRow[];
   rosterLocked: boolean;
+  teamEditingAllowed: boolean;
 }) {
   const [state, action, pending] = useActionState(addTeam, {} as AddTeamState);
   const [addExtra, setAddExtra] = useState(false);
@@ -65,7 +67,9 @@ export function TeamBuilder({
                 key={team.id}
                 tournamentId={tournamentId}
                 team={team}
-                editable={!rosterLocked}
+                editable={teamEditingAllowed}
+                removable={!rosterLocked}
+                publishedPreview={rosterLocked}
               />
             ))}
           </ul>
@@ -73,7 +77,8 @@ export function TeamBuilder({
         {rosterLocked ? (
           <p className="mt-3 text-xs font-medium text-brand-dark">
             {teams.length} team{teams.length === 1 ? "" : "s"} in the published
-            draw — roster locked.
+            draw — teams cannot be added or removed
+            {teamEditingAllowed ? ", but names can be corrected safely." : "."}
           </p>
         ) : teams.length < plannedTeams ? (
           <p className="mt-3 text-xs text-foreground/50">
@@ -130,7 +135,8 @@ export function TeamBuilder({
           </p>
           <p className="mt-1 text-xs text-amber-800">
             Adding a team now would leave them without fixtures. Scores remain
-            locked until the organiser starts play.
+            locked until the organiser starts play. Use Rename / replace above
+            for a substitute without changing the draw.
           </p>
         </div>
       ) : !atLimit || addExtra ? (
@@ -209,10 +215,14 @@ function TeamListItem({
   tournamentId,
   team,
   editable,
+  removable,
+  publishedPreview,
 }: {
   tournamentId: string;
   team: TeamRow;
   editable: boolean;
+  removable: boolean;
+  publishedPreview: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [teamName, setTeamName] = useState(team.name ?? "");
@@ -242,8 +252,9 @@ function TeamListItem({
           <input type="hidden" name="teamId" value={team.id} />
           <input type="hidden" name="players" value={JSON.stringify(players)} />
           <p className="text-xs text-foreground/60">
-            Correct the displayed names here; existing usernames and passwords
-            stay the same. Remove and re-add the team if you need new logins.
+            {publishedPreview
+              ? "Rename or replace a player without changing any group or fixture. Their existing username and password stay the same."
+              : "Correct the displayed names here; existing usernames and passwords stay the same. Remove and re-add the team if you need new logins."}
           </p>
           <label className="block">
             <span className="text-xs font-medium">Team name (optional)</span>
@@ -323,34 +334,36 @@ function TeamListItem({
           )}
           {editState.error && <ErrorNote>{editState.error}</ErrorNote>}
         </form>
-        <form
-          action={removeAction}
-          onSubmit={(event) => {
-            if (
-              !window.confirm(
-                `Remove ${label} and delete their generated logins? This cannot be undone.`,
-              )
-            ) {
-              event.preventDefault();
-            }
-          }}
-          className="mt-3 border-t border-black/5 pt-3 text-center"
-        >
-          <input type="hidden" name="tournamentId" value={tournamentId} />
-          <input type="hidden" name="teamId" value={team.id} />
-          <button
-            type="submit"
-            disabled={removePending}
-            className="text-xs font-medium text-red-700 disabled:opacity-60"
+        {removable && (
+          <form
+            action={removeAction}
+            onSubmit={(event) => {
+              if (
+                !window.confirm(
+                  `Remove ${label} and delete their generated logins? This cannot be undone.`,
+                )
+              ) {
+                event.preventDefault();
+              }
+            }}
+            className="mt-3 border-t border-black/5 pt-3 text-center"
           >
-            {removePending ? "Removing…" : "Remove this team & logins"}
-          </button>
-          {removeState.error && (
-            <p role="alert" className="mt-2 text-xs text-red-800">
-              {removeState.error}
-            </p>
-          )}
-        </form>
+            <input type="hidden" name="tournamentId" value={tournamentId} />
+            <input type="hidden" name="teamId" value={team.id} />
+            <button
+              type="submit"
+              disabled={removePending}
+              className="text-xs font-medium text-red-700 disabled:opacity-60"
+            >
+              {removePending ? "Removing…" : "Remove this team & logins"}
+            </button>
+            {removeState.error && (
+              <p role="alert" className="mt-2 text-xs text-red-800">
+                {removeState.error}
+              </p>
+            )}
+          </form>
+        )}
       </li>
     );
   }
@@ -372,7 +385,7 @@ function TeamListItem({
             onClick={() => setEditing(true)}
             className="shrink-0 text-xs font-medium text-brand hover:text-brand-dark"
           >
-            Edit
+            {publishedPreview ? "Rename / replace" : "Edit"}
           </button>
         )}
       </div>

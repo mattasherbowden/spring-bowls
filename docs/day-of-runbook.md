@@ -17,10 +17,17 @@ day.
   record a walkover or vote.
 - Prefer doing the final roster on Friday. If Saturday-morning changes are
   unavoidable after publishing the preview, open **Teams & logins** and choose
-  **Edit preview — teams or rinks**. This removes only the unpublished draw and
-  photo assignments: every team, username and password is preserved. Correct,
-  add or remove teams, save the available rink count, then publish the preview
-  again. Players who visit during the edit see a clear updating message.
+  **Rename / replace** beside a team. This changes only the displayed player
+  and team names: the same login, password, group and fixtures are preserved.
+  Use it to change a withdrawn player to `TBA`, then change `TBA` to the
+  replacement's name when known. It is available only while the published draw
+  is still in preview and no score or vote exists.
+- If a whole team must be added or removed, or the rink count changes, choose
+  **Edit preview — teams or rinks** instead. This removes only the unpublished
+  draw and photo assignments: every team, username and password is preserved.
+  Correct, add or remove teams, save the available rink count, then publish the
+  preview again. Players who visit during the edit see a clear updating
+  message.
 - **Edit preview** is deliberately unavailable after **Start tournament**, a
   score/walkover, or any vote. The database also serialises simultaneous
   Start/Edit taps, so exactly one can win and the other refuses safely.
@@ -36,7 +43,7 @@ day.
 - Deploy the latest `main` and confirm the deployment includes migration
   `0018_day_of_hardening.sql`, `0019_atomic_draw.sql`, and
   `0020_exclude_admin_nominees.sql` through
-  `0028_edit_preview.sql`.
+  `0029_preview_roster_corrections.sql`.
 - Open `/api/warm` on the production domain. It should return `{"ok":true}`.
 - In Supabase, confirm the project says **Active**. Free projects with too
   little database activity can pause after seven days; the app now makes a
@@ -113,7 +120,9 @@ day.
   fixtures.
 - The roster is locked once the draw is live. This prevents a late-added team
   from receiving a login but no fixtures. Before play starts, the owner may use
-  **Edit preview** to return to a safe setup state and republish the whole draw.
+  **Rename / replace** for a direct substitution that preserves the draw, or
+  **Edit preview** to return to setup and republish the whole draw when its
+  structure must change.
 - Walkovers count consistently in the tables and bracket.
 - If all group scores are in but a knockout slot still says TBA, the owner taps
   **Refresh knockout** on the schedule. Any database failure is shown beside
@@ -166,6 +175,7 @@ These are event-policy choices rather than safe assumptions for the software:
 - Live Supabase smoke tests passed for player isolation, standalone helper
   access, fixture-write isolation, racing result locks, preview voting locks,
   preview reopening, roster/draw and rink/draw races, credential preservation,
-  Photo Bomb edit races, and voting closure.
+  draw-preserving preview replacements, Photo Bomb edit races, and voting
+  closure.
 - Mobile browser checks passed at 390 px width for landing, login, helper home,
   schedule, score entry, and the locked tournament preview.

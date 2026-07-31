@@ -372,6 +372,154 @@ try {
     publishedPreview.rows[0]?.status === "live" &&
       publishedPreview.rows[0]?.fixture_count === 1,
   );
+  const previewFixtureBefore = await client.query(
+    `
+      select md5(
+        coalesce(
+          jsonb_agg(
+            jsonb_build_array(
+              id, stage, group_label, round, rink, order_index,
+              team_a_id, team_b_id, status, shots_a, shots_b, winner_team_id
+            ) order by id
+          )::text,
+          '[]'
+        )
+      ) as fingerprint
+        from public.fixture
+       where tournament_id = $1
+    `,
+    [tournamentId],
+  );
+  await client.query(
+    "select public.update_published_preview_team($1, $2, $3, $4::jsonb)",
+    [
+      tournamentId,
+      drawTeamIds[0],
+      "Preview replacement",
+      JSON.stringify([
+        {
+          id: previewPlayers[0],
+          display_name: "TBA",
+          nationality: "brit",
+        },
+        {
+          id: previewPlayers[2],
+          display_name: "Replacement Partner",
+          nationality: "kiwi",
+        },
+      ]),
+    ],
+  );
+  const previewCorrection = await client.query(
+    `
+      select team.name, team.group_label, team.seed,
+             array_agg(player.display_name order by player.display_name) as names,
+             md5(
+               coalesce(
+                 (
+                   select jsonb_agg(
+                     jsonb_build_array(
+                       fixture.id, fixture.stage, fixture.group_label,
+                       fixture.round, fixture.rink, fixture.order_index,
+                       fixture.team_a_id, fixture.team_b_id, fixture.status,
+                       fixture.shots_a, fixture.shots_b, fixture.winner_team_id
+                     ) order by fixture.id
+                   )::text
+                     from public.fixture as fixture
+                    where fixture.tournament_id = $1
+                 ),
+                 '[]'
+               )
+             ) as fixture_fingerprint
+        from public.team as team
+        join public.player as player on player.team_id = team.id
+       where team.id = $2
+       group by team.id
+    `,
+    [tournamentId, drawTeamIds[0]],
+  );
+  check(
+    "a preview replacement changes labels without touching the draw",
+    previewCorrection.rows[0]?.name === "Preview replacement" &&
+      previewCorrection.rows[0]?.group_label === "A" &&
+      previewCorrection.rows[0]?.names?.join(",") ===
+        "Replacement Partner,TBA" &&
+      previewCorrection.rows[0]?.fixture_fingerprint ===
+        previewFixtureBefore.rows[0]?.fingerprint,
+  );
+
+  let wrongTeamPlayerRejected = false;
+  await client.query("savepoint wrong_preview_player");
+  try {
+    await client.query(
+      "select public.update_published_preview_team($1, $2, $3, $4::jsonb)",
+      [
+        tournamentId,
+        drawTeamIds[0],
+        "Should not save",
+        JSON.stringify([
+          {
+            id: previewPlayers[0],
+            display_name: "Wrong One",
+            nationality: "brit",
+          },
+          {
+            id: previewPlayers[1],
+            display_name: "Wrong Team",
+            nationality: "kiwi",
+          },
+        ]),
+      ],
+    );
+  } catch (error) {
+    wrongTeamPlayerRejected = /player_not_in_team/.test(error?.message ?? "");
+    await client.query("rollback to savepoint wrong_preview_player");
+  }
+  await client.query("release savepoint wrong_preview_player");
+  check(
+    "a replacement cannot move or overwrite another team's player",
+    wrongTeamPlayerRejected,
+  );
+
+  let startedCorrectionRejected = false;
+  await client.query("savepoint correction_after_start");
+  try {
+    await client.query(
+      "select public.start_tournament_play($1)",
+      [tournamentId],
+    );
+    await client.query(
+      "select public.update_published_preview_team($1, $2, $3, $4::jsonb)",
+      [
+        tournamentId,
+        drawTeamIds[0],
+        "Too late",
+        JSON.stringify([
+          {
+            id: previewPlayers[0],
+            display_name: "Too Late",
+            nationality: "brit",
+          },
+          {
+            id: previewPlayers[2],
+            display_name: "Still Too Late",
+            nationality: "kiwi",
+          },
+        ]),
+      ],
+    );
+  } catch (error) {
+    startedCorrectionRejected = /preview_roster_locked/.test(
+      error?.message ?? "",
+    );
+    await client.query("rollback to savepoint correction_after_start");
+  }
+  await client.query("release savepoint correction_after_start");
+  check(
+    "a Start/replace race cannot edit the roster after play opens",
+    startedCorrectionRejected,
+  );
+
   await client.query(
     "select public.set_live_photo_done($1, $2, true)",
     [tournamentId, guestProfiles.rows[0].profile_id],
@@ -559,6 +707,52 @@ try {
       JSON.stringify(assignments),
       JSON.stringify(fixtureRows),
     ],
+  );
+
+  let resultCorrectionRejected = false;
+  await client.query("savepoint correction_with_result");
+  try {
+    await client.query(
+      `
+        update public.fixture
+           set status = 'completed',
+               shots_a = 2,
+               shots_b = 1,
+               winner_team_id = $2
+         where tournament_id = $1
+      `,
+      [tournamentId, drawTeamIds[0]],
+    );
+    await client.query(
+      "select public.update_published_preview_team($1, $2, $3, $4::jsonb)",
+      [
+        tournamentId,
+        drawTeamIds[0],
+        "Must not save",
+        JSON.stringify([
+          {
+            id: previewPlayers[0],
+            display_name: "Must Not Save",
+            nationality: "brit",
+          },
+          {
+            id: previewPlayers[2],
+            display_name: "Also Must Not Save",
+            nationality: "kiwi",
+          },
+        ]),
+      ],
+    );
+  } catch (error) {
+    resultCorrectionRejected = /preview_roster_activity_exists/.test(
+      error?.message ?? "",
+    );
+    await client.query("rollback to savepoint correction_with_result");
+  }
+  await client.query("release savepoint correction_with_result");
+  check(
+    "a preview replacement refuses to change a roster after a result exists",
+    resultCorrectionRejected,
   );
 
   let resultReopenRejected = false;
