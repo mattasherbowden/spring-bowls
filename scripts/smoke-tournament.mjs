@@ -229,6 +229,44 @@ try {
     "a regular client cannot call roster maintenance functions",
     !!outsiderRosterEditError && !!outsiderRosterDeleteError,
   );
+  const protectedCalls = await Promise.all([
+    outClient.rpc("reopen_tournament_preview", {
+      p_tournament_id: tournamentId,
+    }),
+    outClient.rpc("start_tournament_play", {
+      p_tournament_id: tournamentId,
+    }),
+    outClient.rpc("update_tournament_setup_settings", {
+      p_tournament_id: tournamentId,
+      p_rink_count: 4,
+    }),
+    outClient.rpc("create_setup_team", {
+      p_tournament_id: tournamentId,
+      p_team_name: "Hax",
+      p_submit_key: crypto.randomUUID(),
+    }),
+    outClient.rpc("apply_tournament_draw_v2", {
+      p_tournament_id: tournamentId,
+      p_expected_rink_count: 3,
+      p_expected_preferred_group_size: 4,
+      p_assignments: [],
+      p_fixtures: [],
+    }),
+    outClient.rpc("set_live_photo_done", {
+      p_tournament_id: tournamentId,
+      p_profile_id: outsider.id,
+      p_done: true,
+    }),
+    outClient.rpc("set_live_photo_email", {
+      p_tournament_id: tournamentId,
+      p_profile_id: outsider.id,
+      p_email: "outsider@example.com",
+    }),
+  ]);
+  check(
+    "a regular client cannot call preview-edit or protected photo functions",
+    protectedCalls.every((result) => !!result.error),
+  );
   const { data: oT } = await outClient
     .from("tournament")
     .select("id")

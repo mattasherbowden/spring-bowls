@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { suggestUsername, generatePassword } from "./credentials";
+import {
+  generatePassword,
+  suggestUsername,
+  themedPasswordCandidates,
+} from "./credentials";
 
 describe("suggestUsername", () => {
   it("takes the first name, lowercased and trimmed", () => {
@@ -31,5 +35,39 @@ describe("generatePassword", () => {
 
   it("varies with the RNG", () => {
     expect(generatePassword(() => 0.01)).not.toBe(generatePassword(() => 0.99));
+  });
+});
+
+describe("themedPasswordCandidates", () => {
+  it("returns a complete, unique pool for each nationality", () => {
+    for (const nationality of ["brit", "kiwi"] as const) {
+      const candidates = themedPasswordCandidates(nationality, () => 0);
+      expect(candidates.length).toBeGreaterThanOrEqual(20);
+      expect(new Set(candidates).size).toBe(candidates.length);
+      expect(candidates.every((password) => /^[a-z]+\d+$/.test(password))).toBe(
+        true,
+      );
+    }
+  });
+
+  it("keeps the British and Kiwi pools separate", () => {
+    const brits = new Set(themedPasswordCandidates("brit", () => 0));
+    const kiwis = themedPasswordCandidates("kiwi", () => 0);
+    expect(kiwis.some((password) => brits.has(password))).toBe(false);
+  });
+
+  it("uses the RNG only to rotate the pool without losing candidates", () => {
+    const first = themedPasswordCandidates("kiwi", () => 0);
+    const rotated = themedPasswordCandidates("kiwi", () => 0.5);
+    expect(rotated[0]).not.toBe(first[0]);
+    expect(new Set(rotated)).toEqual(new Set(first));
+  });
+
+  it("handles an RNG value of exactly one defensively", () => {
+    const candidates = themedPasswordCandidates("brit", () => 1);
+    expect(candidates).toHaveLength(
+      themedPasswordCandidates("brit", () => 0).length,
+    );
+    expect(candidates[0]).toMatch(/^[a-z]+\d+$/);
   });
 });

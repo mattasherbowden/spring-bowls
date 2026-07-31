@@ -29,11 +29,36 @@ export default async function PhotoPage({
   const admin = createAdminClient();
   const { data: tournament, error: tournamentError } = await admin
     .from("tournament")
-    .select("id")
+    .select("id, status")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
   throwIfSupabaseError(tournamentError, "photo tournament");
+
+  if (tournament?.status === "setup") {
+    return (
+      <main className="flex flex-1 flex-col items-center px-5 py-8">
+        <div className="w-full max-w-md">
+          <div className="flex items-center justify-between">
+            <HomeButton />
+            <h1 className="font-display text-xl font-semibold">
+              <SBMark className="mr-1.5" />📸 Photo Bomb
+            </h1>
+          </div>
+          <div className="mt-6 rounded-2xl bg-amber-50 p-6 text-center ring-1 ring-amber-200">
+            <p className="text-4xl">🛠️</p>
+            <p className="mt-2 font-medium text-amber-950">
+              Photo partners are being updated
+            </p>
+            <p className="mt-1 text-sm text-amber-900/75">
+              Your challenge will reappear once the organiser publishes the
+              revised draw.
+            </p>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   let partnerName: string | null = null;
   let email: string | null = null;

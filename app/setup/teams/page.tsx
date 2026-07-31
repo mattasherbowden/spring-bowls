@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { TeamBuilder } from "./_builder";
 import { GenerateScheduleButton } from "./_generate";
 import { ResetButton } from "./_reset";
+import { EditPreviewButton } from "./_edit-preview";
+import { RinkSettings } from "./_rink-settings";
 import {
   throwIfAuthUnavailable,
   throwIfSupabaseError,
@@ -32,7 +34,7 @@ export default async function TeamsPage() {
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournament")
     .select(
-      "id, name, team_size, planned_teams, status, play_status, fixtures_open_time",
+      "id, name, team_size, planned_teams, rink_count, status, play_status, fixtures_open_time",
     )
     .neq("status", "archived")
     .limit(1)
@@ -82,7 +84,23 @@ export default async function TeamsPage() {
 
         <div className="mt-5">
           {tournament.status === "setup" ? (
-            <GenerateScheduleButton ready={(teams?.length ?? 0) >= 2} />
+            <div className="space-y-3">
+              <section className="rounded-2xl bg-amber-50 p-4 text-center ring-1 ring-amber-200">
+                <p className="font-semibold text-amber-950">
+                  Draw setup is open
+                </p>
+                <p className="mt-1 text-xs text-amber-900/75">
+                  Roster and rink changes are allowed here. Existing logins and
+                  passwords stay unchanged; players will see an updating
+                  message until you publish the preview.
+                </p>
+              </section>
+              <RinkSettings
+                tournamentId={tournament.id}
+                rinkCount={tournament.rink_count}
+              />
+              <GenerateScheduleButton ready={(teams?.length ?? 0) >= 2} />
+            </div>
           ) : (
             <div className="space-y-3">
               {!isPlayOpen(tournament.play_status) && (
@@ -91,12 +109,19 @@ export default async function TeamsPage() {
                     Preview is ready to share
                   </p>
                   <p className="mt-1 text-xs text-foreground/60">
-                    Players can see the draw, but scores and voting are locked.
-                    Their pages say fixtures go live at{" "}
+                    {teams?.length ?? 0}{" "}
+                    {tournament.team_size === 2 ? "pairs" : "teams"} ·{" "}
+                    {tournament.rink_count} rink
+                    {tournament.rink_count === 1 ? "" : "s"}. Players can see
+                    the draw, but scores and voting are locked. Their pages say
+                    fixtures go live at{" "}
                     {formatFixtureOpenTime(tournament.fixtures_open_time)}.
                   </p>
                   <div className="mt-3">
                     <StartTournamentButton />
+                  </div>
+                  <div className="mt-2">
+                    <EditPreviewButton tournamentId={tournament.id} />
                   </div>
                 </section>
               )}

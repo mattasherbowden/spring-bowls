@@ -60,6 +60,31 @@ try {
   if (guestProfiles.rowCount !== 2) {
     throw new Error("Expected two guest profiles in the rehearsal roster");
   }
+  await client.query(
+    "update public.profile set login_password = $1 where id = $2",
+    ["transactional-smoke-unique-password", guestProfiles.rows[0].profile_id],
+  );
+  let duplicatePasswordRejected = false;
+  await client.query("savepoint duplicate_login_password");
+  try {
+    await client.query(
+      "update public.profile set login_password = $1 where id = $2",
+      [
+        "transactional-smoke-unique-password",
+        guestProfiles.rows[1].profile_id,
+      ],
+    );
+  } catch (error) {
+    duplicatePasswordRejected =
+      error?.code === "23505" &&
+      /profile_login_password_unique/.test(error?.constraint ?? "");
+    await client.query("rollback to savepoint duplicate_login_password");
+  }
+  await client.query("release savepoint duplicate_login_password");
+  check(
+    "generated event passwords cannot silently collide",
+    duplicatePasswordRejected,
+  );
 
   // Make room for a setup tournament inside this uncommitted transaction. Other
   // sessions continue to see the real event as live until the final rollback.
@@ -84,19 +109,15 @@ try {
   );
   const submitKey = "8be2538f-8cc4-4f0c-a8f0-0b2b1dca59b8";
   await client.query(
-    `
-      insert into public.team (tournament_id, name, submit_key)
-      values ($1, 'Idempotency first', $2)
-    `,
-    [tournamentId, submitKey],
+    "select public.create_setup_team($1, $2, $3)",
+    [tournamentId, "Idempotency first", submitKey],
   );
   let duplicateRejected = false;
   await client.query("savepoint duplicate_team_submission");
   try {
     await client.query(
       `
-        insert into public.team (tournament_id, name, submit_key)
-        values ($1, 'Idempotency duplicate', $2)
+        select public.create_setup_team($1, 'Idempotency duplicate', $2)
       `,
       [tournamentId, submitKey],
     );
@@ -181,6 +202,461 @@ try {
   check(
     "setup roster removal returns guest logins and removes every roster row",
     removed.rowCount === 2 && remaining.rows[0].count === 0,
+  );
+
+  const drawTeamOne = await client.query(
+    "select id from public.team where tournament_id = $1 and submit_key = $2",
+    [tournamentId, submitKey],
+  );
+  const drawTeamTwo = await client.query(
+    `
+      insert into public.team (tournament_id, name)
+      values ($1, 'Draw second')
+      returning id
+    `,
+    [tournamentId],
+  );
+  const drawTeamIds = [
+    drawTeamOne.rows[0].id,
+    drawTeamTwo.rows[0].id,
+  ];
+  const assignments = drawTeamIds.map((id) => ({
+    id,
+    group_label: "A",
+  }));
+  const fixtureRows = [
+    {
+      group_label: "A",
+      round: 1,
+      rink: 1,
+      order_index: 0,
+      team_a_id: drawTeamIds[0],
+      team_b_id: drawTeamIds[1],
+    },
+  ];
+  const previewPlayers = [];
+  for (const [index, profile] of guestProfiles.rows.entries()) {
+    const inserted = await client.query(
+      `
+        insert into public.player
+          (tournament_id, team_id, profile_id, display_name, nationality)
+        values ($1, $2, $3, $4, $5)
+        returning id
+      `,
+      [
+        tournamentId,
+        drawTeamIds[index],
+        profile.profile_id,
+        `Preview ${index + 1}`,
+        index === 0 ? "brit" : "kiwi",
+      ],
+    );
+    previewPlayers.push(inserted.rows[0].id);
+  }
+
+  let incompleteRosterRejected = false;
+  await client.query("savepoint incomplete_roster_draw");
+  try {
+    await client.query(
+      "select public.apply_tournament_draw_v2($1, $2, $3, $4::jsonb, $5::jsonb)",
+      [
+        tournamentId,
+        3,
+        4,
+        JSON.stringify(assignments),
+        JSON.stringify(fixtureRows),
+      ],
+    );
+  } catch (error) {
+    incompleteRosterRejected =
+      /draw_roster_incomplete/.test(error?.message ?? "");
+    await client.query("rollback to savepoint incomplete_roster_draw");
+  }
+  await client.query("release savepoint incomplete_roster_draw");
+  check(
+    "the draw waits for both accounts in a concurrently-added pair",
+    incompleteRosterRejected,
+  );
+
+  const extraProfile = await client.query(
+    `
+      select id
+        from public.profile
+       where id <> $1
+         and not (id = any($2::uuid[]))
+       limit 1
+    `,
+    [
+      ownerId,
+      guestProfiles.rows.map((profile) => profile.profile_id),
+    ],
+  );
+  if (extraProfile.rowCount !== 1) {
+    throw new Error("Expected one extra profile for the draw race check");
+  }
+  for (const [index, profileId] of [
+    ownerId,
+    extraProfile.rows[0].id,
+  ].entries()) {
+    const inserted = await client.query(
+      `
+        insert into public.player
+          (tournament_id, team_id, profile_id, display_name, nationality)
+        values ($1, $2, $3, $4, $5)
+        returning id
+      `,
+      [
+        tournamentId,
+        drawTeamIds[index],
+        profileId,
+        `Preview extra ${index + 1}`,
+        index === 0 ? "kiwi" : "brit",
+      ],
+    );
+    previewPlayers.push(inserted.rows[0].id);
+  }
+  await client.query(
+    `
+      update public.player
+         set photo_partner_id = case
+               when id = $1 then $2::uuid
+               else $1::uuid
+             end,
+             photo_done = true,
+             photo_email = 'preview@example.com'
+       where id = any($3::uuid[])
+    `,
+    [previewPlayers[0], previewPlayers[1], previewPlayers],
+  );
+  const credentialsBefore = await client.query(
+    `
+      select id, username, login_password
+        from public.profile
+       where id = any($1::uuid[])
+       order by id
+    `,
+    [guestProfiles.rows.map((profile) => profile.profile_id)],
+  );
+  await client.query(
+    "select public.apply_tournament_draw_v2($1, $2, $3, $4::jsonb, $5::jsonb)",
+    [
+      tournamentId,
+      3,
+      4,
+      JSON.stringify(assignments),
+      JSON.stringify(fixtureRows),
+    ],
+  );
+  await client.query(
+    `
+      insert into public.qualification_tiebreak
+        (tournament_id, group_label, ordered_team_ids, decided_by)
+      values ($1, 'A', $2::uuid[], $3)
+    `,
+    [tournamentId, drawTeamIds, ownerId],
+  );
+  const publishedPreview = await client.query(
+    `
+      select tournament.status,
+             count(fixture.id)::int as fixture_count
+        from public.tournament as tournament
+        left join public.fixture as fixture
+          on fixture.tournament_id = tournament.id
+       where tournament.id = $1
+       group by tournament.status
+    `,
+    [tournamentId],
+  );
+  check(
+    "the settings-aware draw publishes one complete preview",
+    publishedPreview.rows[0]?.status === "live" &&
+      publishedPreview.rows[0]?.fixture_count === 1,
+  );
+  await client.query(
+    "select public.set_live_photo_done($1, $2, true)",
+    [tournamentId, guestProfiles.rows[0].profile_id],
+  );
+  await client.query(
+    "select public.set_live_photo_email($1, $2, $3)",
+    [
+      tournamentId,
+      guestProfiles.rows[0].profile_id,
+      "live-preview@example.com",
+    ],
+  );
+  check("photo challenge writes work while a preview is published", true);
+
+  await client.query(
+    "select public.reopen_tournament_preview($1)",
+    [tournamentId],
+  );
+  const reopened = await client.query(
+    `
+      select tournament.status,
+             tournament.play_status,
+             (select count(*)::int
+                from public.fixture
+               where tournament_id = tournament.id) as fixture_count,
+             (select count(*)::int
+                from public.team
+               where tournament_id = tournament.id
+                 and (group_label is not null or seed is not null)) as assigned_teams,
+             (select count(*)::int
+                from public.player
+               where tournament_id = tournament.id) as player_count,
+             (select count(*)::int
+                from public.player
+               where tournament_id = tournament.id
+                 and (
+                   photo_partner_id is not null
+                   or photo_done
+                 )) as stale_photo_players,
+             (select count(*)::int
+                from public.player
+               where tournament_id = tournament.id
+                 and photo_email is not null) as preserved_photo_emails,
+             (select count(*)::int
+                from public.qualification_tiebreak
+               where tournament_id = tournament.id) as tiebreak_count
+        from public.tournament as tournament
+       where tournament.id = $1
+    `,
+    [tournamentId],
+  );
+  const credentialsAfter = await client.query(
+    `
+      select id, username, login_password
+        from public.profile
+       where id = any($1::uuid[])
+       order by id
+    `,
+    [guestProfiles.rows.map((profile) => profile.profile_id)],
+  );
+  check(
+    "reopening removes only draw-derived state",
+    reopened.rows[0]?.status === "setup" &&
+      reopened.rows[0]?.play_status === "preview" &&
+      reopened.rows[0]?.fixture_count === 0 &&
+      reopened.rows[0]?.assigned_teams === 0 &&
+      reopened.rows[0]?.player_count === 4 &&
+      reopened.rows[0]?.stale_photo_players === 0 &&
+      reopened.rows[0]?.preserved_photo_emails === 4 &&
+      reopened.rows[0]?.tiebreak_count === 0,
+  );
+  check(
+    "reopening preserves usernames and passwords exactly",
+    JSON.stringify(credentialsAfter.rows) ===
+      JSON.stringify(credentialsBefore.rows),
+  );
+  let editingPhotoRejected = false;
+  await client.query("savepoint photo_during_edit");
+  try {
+    await client.query(
+      "select public.set_live_photo_done($1, $2, true)",
+      [tournamentId, guestProfiles.rows[0].profile_id],
+    );
+  } catch (error) {
+    editingPhotoRejected = /photo_unavailable/.test(error?.message ?? "");
+    await client.query("rollback to savepoint photo_during_edit");
+  }
+  await client.query("release savepoint photo_during_edit");
+  check(
+    "a stale Photo Bomb tap cannot write into an open edit window",
+    editingPhotoRejected,
+  );
+
+  await client.query(
+    "select public.reopen_tournament_preview($1)",
+    [tournamentId],
+  );
+  check("a double Edit preview submission is idempotent", true);
+
+  let setupStartRejected = false;
+  await client.query("savepoint start_during_edit");
+  try {
+    await client.query(
+      "select public.start_tournament_play($1)",
+      [tournamentId],
+    );
+  } catch (error) {
+    setupStartRejected = /play_not_live/.test(error?.message ?? "");
+    await client.query("rollback to savepoint start_during_edit");
+  }
+  await client.query("release savepoint start_during_edit");
+  check(
+    "Start cannot win after Edit has reopened setup",
+    setupStartRejected,
+  );
+
+  await client.query(
+    "select public.update_tournament_setup_settings($1, $2)",
+    [tournamentId, 4],
+  );
+  let invalidRinksRejected = false;
+  await client.query("savepoint invalid_rinks");
+  try {
+    await client.query(
+      "select public.update_tournament_setup_settings($1, $2)",
+      [tournamentId, 0],
+    );
+  } catch (error) {
+    invalidRinksRejected = /invalid_rink_count/.test(error?.message ?? "");
+    await client.query("rollback to savepoint invalid_rinks");
+  }
+  await client.query("release savepoint invalid_rinks");
+  check("invalid rink counts are rejected atomically", invalidRinksRejected);
+
+  await client.query(
+    "select public.update_tournament_setup_settings($1, $2)",
+    [tournamentId, 5],
+  );
+  let staleDrawRejected = false;
+  await client.query("savepoint stale_draw_settings");
+  try {
+    await client.query(
+      "select public.apply_tournament_draw_v2($1, $2, $3, $4::jsonb, $5::jsonb)",
+      [
+        tournamentId,
+        4,
+        4,
+        JSON.stringify(assignments),
+        JSON.stringify(fixtureRows),
+      ],
+    );
+  } catch (error) {
+    staleDrawRejected = /draw_settings_changed/.test(error?.message ?? "");
+    await client.query("rollback to savepoint stale_draw_settings");
+  }
+  await client.query("release savepoint stale_draw_settings");
+  const afterStaleDraw = await client.query(
+    `
+      select status, rink_count,
+             (select count(*)::int from public.fixture where tournament_id = $1)
+               as fixture_count
+        from public.tournament
+       where id = $1
+    `,
+    [tournamentId],
+  );
+  check(
+    "a rink-edit/draw race cannot publish a stale schedule",
+    staleDrawRejected &&
+      afterStaleDraw.rows[0]?.status === "setup" &&
+      afterStaleDraw.rows[0]?.rink_count === 5 &&
+      afterStaleDraw.rows[0]?.fixture_count === 0,
+  );
+
+  await client.query(
+    "select public.update_tournament_setup_settings($1, $2)",
+    [tournamentId, 4],
+  );
+  await client.query(
+    "select public.apply_tournament_draw_v2($1, $2, $3, $4::jsonb, $5::jsonb)",
+    [
+      tournamentId,
+      4,
+      4,
+      JSON.stringify(assignments),
+      JSON.stringify(fixtureRows),
+    ],
+  );
+
+  let resultReopenRejected = false;
+  await client.query("savepoint preview_with_result");
+  try {
+    await client.query(
+      `
+        update public.fixture
+           set status = 'completed',
+               shots_a = 2,
+               shots_b = 1,
+               winner_team_id = $2
+         where tournament_id = $1
+      `,
+      [tournamentId, drawTeamIds[0]],
+    );
+    await client.query(
+      "select public.reopen_tournament_preview($1)",
+      [tournamentId],
+    );
+  } catch (error) {
+    resultReopenRejected =
+      /preview_edit_results_exist/.test(error?.message ?? "");
+    await client.query("rollback to savepoint preview_with_result");
+  }
+  await client.query("release savepoint preview_with_result");
+  check(
+    "Edit preview refuses to erase even one entered result",
+    resultReopenRejected,
+  );
+
+  let startedReopenRejected = false;
+  await client.query("savepoint start_then_edit");
+  try {
+    await client.query(
+      "select public.start_tournament_play($1)",
+      [tournamentId],
+    );
+    await client.query(
+      "select public.reopen_tournament_preview($1)",
+      [tournamentId],
+    );
+  } catch (error) {
+    startedReopenRejected =
+      /preview_edit_play_open/.test(error?.message ?? "");
+    await client.query("rollback to savepoint start_then_edit");
+  }
+  await client.query("release savepoint start_then_edit");
+  check(
+    "Start winning the row lock makes a simultaneous Edit refuse safely",
+    startedReopenRejected,
+  );
+
+  let votedReopenRejected = false;
+  await client.query("savepoint vote_then_edit");
+  try {
+    await client.query(
+      "select public.start_tournament_play($1)",
+      [tournamentId],
+    );
+    await client.query(
+      `
+        insert into public.award_vote
+          (tournament_id, award_key, voter_id, target_type, target_id)
+        values ($1, 'bowl_of_the_day', $2, 'player', $3)
+      `,
+      [
+        tournamentId,
+        guestProfiles.rows[0].profile_id,
+        previewPlayers[1],
+      ],
+    );
+    await client.query(
+      "update public.tournament set play_status = 'preview' where id = $1",
+      [tournamentId],
+    );
+    await client.query(
+      "select public.reopen_tournament_preview($1)",
+      [tournamentId],
+    );
+  } catch (error) {
+    votedReopenRejected =
+      /preview_edit_votes_exist/.test(error?.message ?? "");
+    await client.query("rollback to savepoint vote_then_edit");
+  }
+  await client.query("release savepoint vote_then_edit");
+  check(
+    "Edit preview refuses to erase an existing vote even in an invalid state",
+    votedReopenRejected,
+  );
+
+  await client.query(
+    "select public.reopen_tournament_preview($1)",
+    [tournamentId],
+  );
+  await client.query(
+    "delete from public.player where id = any($1::uuid[])",
+    [previewPlayers],
   );
 
   const votingTeam = await client.query(

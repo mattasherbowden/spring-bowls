@@ -240,6 +240,44 @@ function LogoutButton() {
   );
 }
 
+function DrawUpdatingNotice({
+  firstName,
+  isOwner,
+}: {
+  firstName: string;
+  isOwner: boolean;
+}) {
+  return (
+    <>
+      <section className="mt-8 rounded-2xl bg-amber-50 p-6 text-center ring-1 ring-amber-200">
+        <p className="text-4xl">🛠️</p>
+        <h2 className="mt-2 font-display text-xl font-semibold text-amber-950">
+          Hi {firstName} — the draw is being updated
+        </h2>
+        <p className="mt-2 text-sm text-amber-900/75">
+          Your login and team are safe. The organiser is making a change and
+          your fixtures will reappear here once the revised preview is
+          published.
+        </p>
+        {isOwner && (
+          <Link
+            href="/setup/teams"
+            className="mt-4 inline-block rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark"
+          >
+            Continue editing the preview
+          </Link>
+        )}
+      </section>
+      <Link
+        href="/day"
+        className="mt-4 block rounded-xl border border-black/10 bg-white px-4 py-3 text-center text-sm font-medium hover:bg-black/[.03]"
+      >
+        Day plan — schedule, dress code &amp; venue
+      </Link>
+    </>
+  );
+}
+
 export default async function Home() {
   const supabase = await createClient();
   const {
@@ -323,6 +361,17 @@ export default async function Home() {
   const firstName = profile?.display_name?.split(" ")[0] ?? "there";
 
   if (tournament && teamId) {
+    if (tournament.status === "setup") {
+      return (
+        <Shell dateLabel={dateLabel}>
+          <DrawUpdatingNotice
+            firstName={firstName}
+            isOwner={!!profile?.is_owner}
+          />
+          <LogoutButton />
+        </Shell>
+      );
+    }
     return (
       <Shell dateLabel={dateLabel}>
         <PlayerHome

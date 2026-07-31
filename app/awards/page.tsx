@@ -95,6 +95,31 @@ export default async function AwardsPage() {
     );
   }
 
+  if (tournament.status === "setup") {
+    return (
+      <Frame>
+        <div className="mt-8 rounded-2xl bg-amber-50 p-6 text-center ring-1 ring-amber-200">
+          <p className="text-4xl">🛠️</p>
+          <p className="mt-2 font-medium text-amber-950">
+            The organiser is updating the draw
+          </p>
+          <p className="mt-1 text-sm text-amber-900/75">
+            Voting remains safely closed. The fixture preview and Bowl of the
+            Day will return once the revised draw is published.
+          </p>
+          {prof?.is_owner && (
+            <Link
+              href="/setup/teams"
+              className="mt-4 inline-block text-sm font-semibold text-brand hover:text-brand-dark"
+            >
+              Continue editing →
+            </Link>
+          )}
+        </div>
+      </Frame>
+    );
+  }
+
   const status = tournament.voting_status as VotingStatus;
   const playOpen = isPlayOpen(tournament.play_status);
   const bowlOpen = isAwardVotingOpen(

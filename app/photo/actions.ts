@@ -22,19 +22,24 @@ export async function togglePhotoDone(
   const admin = createAdminClient();
   const { data: tournament } = await admin
     .from("tournament")
-    .select("id")
+    .select("id, status")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
   if (!tournament) return { error: "No active tournament." };
+  if (tournament.status !== "live") {
+    return { error: "The draw is being updated — check back in a moment." };
+  }
 
-  const { data: updated, error } = await admin
-    .from("player")
-    .update({ photo_done: done })
-    .eq("tournament_id", tournament.id)
-    .eq("profile_id", user.id)
-    .select("id");
-  if (error || !updated || updated.length === 0) {
+  const { error } = await admin.rpc("set_live_photo_done", {
+    p_tournament_id: tournament.id,
+    p_profile_id: user.id,
+    p_done: done,
+  });
+  if (error) {
+    if (/photo_unavailable/.test(error.message)) {
+      return { error: "The draw is being updated — check back in a moment." };
+    }
     return {
       error: "Could not update the photo challenge — check your signal and try again.",
     };
@@ -64,19 +69,24 @@ export async function savePhotoEmail(
   const admin = createAdminClient();
   const { data: tournament } = await admin
     .from("tournament")
-    .select("id")
+    .select("id, status")
     .neq("status", "archived")
     .limit(1)
     .maybeSingle();
   if (!tournament) return { error: "No active tournament." };
+  if (tournament.status !== "live") {
+    return { error: "The draw is being updated — check back in a moment." };
+  }
 
-  const { data: updated, error } = await admin
-    .from("player")
-    .update({ photo_email: email })
-    .eq("tournament_id", tournament.id)
-    .eq("profile_id", user.id)
-    .select("id");
-  if (error || !updated || updated.length === 0) {
+  const { error } = await admin.rpc("set_live_photo_email", {
+    p_tournament_id: tournament.id,
+    p_profile_id: user.id,
+    p_email: email,
+  });
+  if (error) {
+    if (/photo_unavailable/.test(error.message)) {
+      return { error: "The draw is being updated — check back in a moment." };
+    }
     return { error: "Could not save your email — check your signal and try again." };
   }
   redirect("/photo");

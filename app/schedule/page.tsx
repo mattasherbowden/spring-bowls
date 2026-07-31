@@ -103,7 +103,7 @@ export default async function SchedulePage() {
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournament")
     .select(
-      "id, name, advance, rink_count, ends_per_game, minutes_per_end, play_status, fixtures_open_time",
+      "id, name, advance, rink_count, ends_per_game, minutes_per_end, status, play_status, fixtures_open_time",
     )
     .neq("status", "archived")
     .limit(1)
@@ -386,7 +386,26 @@ export default async function SchedulePage() {
           </div>
         </header>
 
-        {!isPlayOpen(tournament.play_status) && (
+        {tournament.status === "setup" ? (
+          <section className="mt-5 rounded-2xl bg-amber-50 p-5 text-center ring-1 ring-amber-200">
+            <p className="text-2xl">🛠️</p>
+            <p className="mt-1 font-display text-xl font-semibold text-amber-950">
+              The organiser is updating the draw
+            </p>
+            <p className="mt-1 text-sm text-amber-900/75">
+              Teams and logins are safe. The revised fixtures will appear here
+              once the preview is published again.
+            </p>
+            {isOwner && (
+              <Link
+                href="/setup/teams"
+                className="mt-3 inline-block text-sm font-semibold text-brand hover:text-brand-dark"
+              >
+                Continue editing →
+              </Link>
+            )}
+          </section>
+        ) : !isPlayOpen(tournament.play_status) ? (
           <div className="mt-5">
             <PlayPreviewBanner
               openTimeLabel={formatFixtureOpenTime(
@@ -395,7 +414,7 @@ export default async function SchedulePage() {
               isOwner={isOwner}
             />
           </div>
-        )}
+        ) : null}
 
         {canManage && fixtures.length > 0 && (
           <section

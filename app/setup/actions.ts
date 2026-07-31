@@ -10,7 +10,12 @@ import {
   deleteAuthUser,
   setAuthUserPassword,
 } from "@/lib/supabase/auth-admin";
-import { suggestUsername, generatePassword } from "@/lib/domain/credentials";
+import {
+  generatePassword,
+  suggestUsername,
+  themedPasswordCandidates,
+  type LoginNationality,
+} from "@/lib/domain/credentials";
 import { splitIntoGroups } from "@/lib/domain/planner";
 import { drawGroups, buildGroupSchedule } from "@/lib/domain/schedule";
 import { assignPhotoPartners } from "@/lib/domain/photo";
@@ -105,31 +110,19 @@ export async function startTournamentPlay(
   }
   if (isPlayOpen(tournament.play_status)) return { done: true };
 
-  const { data: updated, error } = await admin
-    .from("tournament")
-    .update({
-      play_status: "open",
-      // A new preview should always begin with Bowl of the Day available while
-      // ceremony voting remains closed.
-      voting_status: "pending",
-    })
-    .eq("id", tournament.id)
-    .eq("play_status", "preview")
-    .select("id");
+  const { error } = await admin.rpc("start_tournament_play", {
+    p_tournament_id: tournament.id,
+  });
   if (error) {
+    if (/play_not_live/.test(error.message)) {
+      return {
+        error:
+          "The preview is being edited, so play was not opened. Publish the new draw first.",
+      };
+    }
     return {
       error: "Could not start play — check your signal and try again.",
     };
-  }
-  if (!updated || updated.length === 0) {
-    const { data: latest } = await admin
-      .from("tournament")
-      .select("play_status")
-      .eq("id", tournament.id)
-      .maybeSingle();
-    if (!isPlayOpen(latest?.play_status)) {
-      return { error: "Play was not opened. Refresh and try again." };
-    }
   }
 
   revalidatePath("/");
@@ -172,6 +165,36 @@ async function uniqueUsername(
     candidate = `${base}${n}`.slice(0, 32);
   }
   return `${base}${Math.floor(Math.random() * 100000)}`.slice(0, 32);
+}
+
+async function uniqueThemedPassword(
+  admin: SupabaseClient,
+  nationality: LoginNationality,
+): Promise<string> {
+  const candidates = themedPasswordCandidates(nationality);
+  const { data, error } = await admin
+    .from("profile")
+    .select("login_password")
+    .not("login_password", "is", null);
+  if (error) {
+    throw new Error("the password list could not be checked");
+  }
+  const used = new Set(
+    (data ?? [])
+      .map((profile) => profile.login_password)
+      .filter((password): password is string => !!password),
+  );
+  const available = candidates.find((candidate) => !used.has(candidate));
+  if (available) return available;
+
+  // This should only happen after dozens of players of one nationality. Keep
+  // the memorable base and add enough entropy to remain unique.
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const suffix = String(Math.floor(Math.random() * 9000) + 1000);
+    const candidate = `${candidates[0]}${suffix}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  throw new Error("a unique themed password could not be generated");
 }
 
 const SUBMISSION_KEY =
@@ -297,6 +320,9 @@ export async function addTeam(
   if (players.length !== teamSize) {
     return { error: `Enter all ${teamSize} player names.` };
   }
+  if (players.some((player) => player.nationality === null)) {
+    return { error: "Choose Brit or Kiwi for every player." };
+  }
   if (players.filter((p) => p.isMe).length > 1) {
     return { error: "Only one player can be marked 'This is me'." };
   }
@@ -313,15 +339,14 @@ export async function addTeam(
   }
   const teamName = String(fd.get("teamName") ?? "").trim() || null;
 
-  const { data: team, error: teamErr } = await admin
-    .from("team")
-    .insert({
-      tournament_id: tournament.id,
-      name: teamName,
-      submit_key: submitKey,
-    })
-    .select("id")
-    .single();
+  const { data: teamId, error: teamErr } = await admin.rpc(
+    "create_setup_team",
+    {
+      p_tournament_id: tournament.id,
+      p_team_name: teamName ?? "",
+      p_submit_key: submitKey,
+    },
+  );
   if (
     teamErr?.code === "23505" &&
     /team_submit_key_unique|submit_key/i.test(teamErr.message)
@@ -342,7 +367,14 @@ export async function addTeam(
         "That team is already being added. Wait a moment, then submit again if it does not appear.",
     };
   }
-  if (teamErr || !team) return { error: "Could not create the team." };
+  if (/roster_locked/.test(teamErr?.message ?? "")) {
+    return {
+      error:
+        "The draw was published while this team was being added. Nothing was saved.",
+    };
+  }
+  if (teamErr || !teamId) return { error: "Could not create the team." };
+  const team = { id: String(teamId) };
 
   const createdUserIds: string[] = [];
   const output: CreatedPlayer[] = [];
@@ -370,7 +402,10 @@ export async function addTeam(
       }
 
       const username = await uniqueUsername(admin, p.displayName);
-      const password = generatePassword();
+      const password = await uniqueThemedPassword(
+        admin,
+        p.nationality as LoginNationality,
+      );
       const email = `${username.toLowerCase()}@${EMAIL_DOMAIN}`;
 
       const created = await createAuthUser(email, password);
@@ -575,6 +610,125 @@ export async function removeTeam(
 
 export type GenerateState = { error?: string; done?: boolean };
 
+export type PreviewEditState = { error?: string; done?: boolean };
+
+function revalidateTournamentViews() {
+  revalidatePath("/");
+  revalidatePath("/schedule");
+  revalidatePath("/awards");
+  revalidatePath("/photo");
+  revalidatePath("/setup/teams");
+  revalidatePath("/setup/logins");
+}
+
+export async function reopenPreviewForEditing(
+  _prev: PreviewEditState,
+  fd: FormData,
+): Promise<PreviewEditState> {
+  const ownerId = await currentOwnerId();
+  if (!ownerId) {
+    return { error: "Only the owner can edit the tournament preview." };
+  }
+
+  const tournamentId = String(fd.get("tournamentId") ?? "");
+  if (!tournamentId) {
+    return { error: "This preview page is stale. Refresh and try again." };
+  }
+
+  const admin = createAdminClient();
+  const { data: tournament, error: loadError } = await admin
+    .from("tournament")
+    .select("id, status, play_status")
+    .eq("id", tournamentId)
+    .neq("status", "archived")
+    .maybeSingle();
+  if (loadError || !tournament) {
+    return { error: "Could not load the active tournament. Refresh and try again." };
+  }
+  if (
+    tournament.status === "setup" &&
+    tournament.play_status === "preview"
+  ) {
+    revalidateTournamentViews();
+    return { done: true };
+  }
+
+  const { error } = await admin.rpc("reopen_tournament_preview", {
+    p_tournament_id: tournamentId,
+  });
+  if (error) {
+    if (/preview_edit_play_open/.test(error.message)) {
+      return {
+        error:
+          "Play has already started, so the draw can no longer be reopened.",
+      };
+    }
+    if (/preview_edit_voting_started|preview_edit_votes_exist/.test(error.message)) {
+      return {
+        error:
+          "Voting has already started, so the draw can no longer be reopened.",
+      };
+    }
+    if (/preview_edit_results_exist/.test(error.message)) {
+      return {
+        error:
+          "A result or live game already exists, so the draw can no longer be reopened.",
+      };
+    }
+    if (/preview_edit_not_live/.test(error.message)) {
+      return {
+        error:
+          "The preview changed while you were editing. Refresh before trying again.",
+      };
+    }
+    return {
+      error: `The preview was not changed. Refresh and try again (${error.message}).`,
+    };
+  }
+
+  revalidateTournamentViews();
+  return { done: true };
+}
+
+export async function updateSetupRinks(
+  _prev: PreviewEditState,
+  fd: FormData,
+): Promise<PreviewEditState> {
+  const ownerId = await currentOwnerId();
+  if (!ownerId) {
+    return { error: "Only the owner can change the number of rinks." };
+  }
+
+  const tournamentId = String(fd.get("tournamentId") ?? "");
+  const rinkCount = Number(fd.get("rinkCount"));
+  if (!tournamentId) {
+    return { error: "This setup page is stale. Refresh and try again." };
+  }
+  if (!Number.isInteger(rinkCount) || rinkCount < 1 || rinkCount > 20) {
+    return { error: "Enter a whole number of rinks from 1 to 20." };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin.rpc("update_tournament_setup_settings", {
+    p_tournament_id: tournamentId,
+    p_rink_count: rinkCount,
+  });
+  if (error) {
+    if (/roster_locked/.test(error.message)) {
+      return {
+        error:
+          "The draw was published while you were editing. Reopen the preview before changing rinks.",
+      };
+    }
+    return {
+      error: `The rink count was not changed. Refresh and try again (${error.message}).`,
+    };
+  }
+
+  revalidateTournamentViews();
+  return { done: true };
+}
+
 export async function generateSchedule(
   _prev: GenerateState,
   _fd: FormData,
@@ -621,14 +775,28 @@ export async function generateSchedule(
     team_a_id: f.teamA,
     team_b_id: f.teamB,
   }));
-  const { error: drawError } = await admin.rpc("apply_tournament_draw", {
+  const { error: drawError } = await admin.rpc("apply_tournament_draw_v2", {
     p_tournament_id: t.id,
+    p_expected_rink_count: t.rink_count,
+    p_expected_preferred_group_size: t.preferred_group_size,
     p_assignments: assignments,
     p_fixtures: rows,
   });
   if (drawError) {
     if (/draw_already_live|fixtures_already_exist/.test(drawError.message)) {
       redirect("/schedule");
+    }
+    if (/draw_settings_changed/.test(drawError.message)) {
+      return {
+        error:
+          "The number of rinks changed while the draw was being prepared. Nothing was published — press the button again.",
+      };
+    }
+    if (/draw_roster_incomplete/.test(drawError.message)) {
+      return {
+        error:
+          "A team login is still being created. Nothing was published — wait a moment and press the button again.",
+      };
     }
     return {
       error: `The draw was not saved, so nothing changed. Try again (${drawError.message}).`,
