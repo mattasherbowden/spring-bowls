@@ -243,6 +243,16 @@ function TeamListItem({
     {} as EditTeamState,
   );
   const label = team.name ?? team.players.map((player) => player.display_name).join(" & ");
+  const updatePlayerName = (playerId: string, displayName: string) => {
+    const generatedName = players.map((player) => player.displayName).join(" & ");
+    const nextPlayers = players.map((player) =>
+      player.id === playerId ? { ...player, displayName } : player,
+    );
+    if (teamName === generatedName) {
+      setTeamName(nextPlayers.map((player) => player.displayName).join(" & "));
+    }
+    setPlayers(nextPlayers);
+  };
 
   if (editing && editable) {
     return (
@@ -272,13 +282,7 @@ function TeamListItem({
                 <input
                   value={player.displayName}
                   onChange={(event) =>
-                    setPlayers((current) =>
-                      current.map((item) =>
-                        item.id === player.id
-                          ? { ...item, displayName: event.target.value }
-                          : item,
-                      ),
-                    )
+                    updatePlayerName(player.id, event.target.value)
                   }
                   className="mt-1 w-full rounded-lg border border-black/10 px-3 py-2 text-base text-black outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
                 />
