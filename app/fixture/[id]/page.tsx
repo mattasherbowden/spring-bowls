@@ -12,6 +12,7 @@ import {
   formatFixtureOpenTime,
   isPlayOpen,
 } from "@/lib/domain/play-state";
+import { displayRinkNumber } from "@/lib/domain/rink-label";
 
 type TeamRow = {
   id: string;
@@ -59,7 +60,9 @@ export default async function FixturePage({
 
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournament")
-    .select("ends_per_game, play_status, fixtures_open_time")
+    .select(
+      "ends_per_game, play_status, fixtures_open_time, rink_number_start",
+    )
     .eq("id", fixture.tournament_id)
     .maybeSingle();
   throwIfSupabaseError(tournamentError, "fixture rules");
@@ -103,7 +106,11 @@ export default async function FixturePage({
             {fixture.stage === "knockout"
               ? postGroupMatchLabel(fixture.match_code)
               : `Group ${fixture.group_label} · Round ${fixture.round}`}{" "}
-            · Rink {fixture.rink}
+            · Rink{" "}
+            {displayRinkNumber(
+              fixture.rink,
+              tournament?.rink_number_start,
+            ) ?? "TBC"}
           </p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight">
             {teamName(fixture.team_a_id)}{" "}

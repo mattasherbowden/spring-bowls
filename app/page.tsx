@@ -25,6 +25,7 @@ import {
   type PlayStatus,
 } from "@/lib/domain/play-state";
 import { PlayPreviewBanner } from "./_components/play-preview-banner";
+import { displayRinkNumber } from "@/lib/domain/rink-label";
 
 type TeamLite = { id: string; name: string | null; players: { display_name: string }[] };
 type FixtureLite = {
@@ -339,7 +340,7 @@ export default async function Home() {
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournament")
     .select(
-      "id, name, advance, status, play_status, fixtures_open_time",
+      "id, name, advance, status, play_status, fixtures_open_time, rink_number_start",
     )
     .neq("status", "archived")
     .limit(1)
@@ -383,6 +384,7 @@ export default async function Home() {
           isAdmin={!!profile?.is_admin}
           playStatus={tournament.play_status as PlayStatus}
           fixturesOpenTime={tournament.fixtures_open_time}
+          rinkNumberStart={tournament.rink_number_start}
         />
         <LogoutButton />
       </Shell>
@@ -538,6 +540,7 @@ async function PlayerHome({
   isAdmin,
   playStatus,
   fixturesOpenTime,
+  rinkNumberStart,
 }: {
   tournamentId: string;
   advance: number;
@@ -547,10 +550,13 @@ async function PlayerHome({
   isAdmin: boolean;
   playStatus: PlayStatus;
   fixturesOpenTime: string | null;
+  rinkNumberStart: number;
 }) {
   const supabase = await createClient();
   const playOpen = isPlayOpen(playStatus);
   const openTimeLabel = formatFixtureOpenTime(fixturesOpenTime);
+  const rinkLabel = (rink: number | null | undefined) =>
+    displayRinkNumber(rink, rinkNumberStart);
 
   const { data: allTeamsData, error: allTeamsError } = await supabase
     .from("team")
@@ -799,7 +805,7 @@ async function PlayerHome({
                           : "text-brand-dark"
                       }`}
                     >
-                      Rink {upNext.rink}
+                      Rink {rinkLabel(upNext.rink)}
                     </div>
                   </div>
                 )}
@@ -820,7 +826,7 @@ async function PlayerHome({
                     {pick(LIVE_LINES)}
                   </p>
                   <p className="mt-0.5 text-sm font-medium text-white/90">
-                    Rink {upNext.rink} is clear — head over now
+                    Rink {rinkLabel(upNext.rink)} is clear — head over now
                   </p>
                 </div>
               )}
@@ -842,11 +848,11 @@ async function PlayerHome({
                               : aheadGame.team_b_id,
                           )}
                         </span>{" "}
-                        to finish on Rink {aheadGame.rink ?? "TBC"}
+                        to finish on Rink {rinkLabel(aheadGame.rink) ?? "TBC"}
                       </>
                     ) : (
                       <>
-                        Rink {upNext.rink} is still on with{" "}
+                        Rink {rinkLabel(upNext.rink)} is still on with{" "}
                         <span className="font-semibold">
                           {nameOf(aheadGame.team_a_id)} v{" "}
                           {nameOf(aheadGame.team_b_id)}
@@ -936,7 +942,7 @@ async function PlayerHome({
                 >
                   <span className="text-xs font-medium uppercase tracking-wide text-foreground/50">
                     {f.stage === "knockout" ? gameLabel(f) : "Group game"}
-                    {f.rink ? ` · Rink ${f.rink}` : ""}
+                    {f.rink ? ` · Rink ${rinkLabel(f.rink)}` : ""}
                   </span>
                   <p className="mt-1 font-medium">v {nameOf(v.oppId)}</p>
                 </div>
@@ -962,7 +968,7 @@ async function PlayerHome({
                     <span className="text-xs font-medium uppercase tracking-wide text-foreground/50">
                       {f.stage === "knockout" ? `${gameLabel(f)} · ` : ""}
                       {v.won ? "Won" : "Lost"}
-                      {f.rink ? ` · Rink ${f.rink}` : ""}
+                      {f.rink ? ` · Rink ${rinkLabel(f.rink)}` : ""}
                     </span>
                     <span className="text-sm font-semibold">
                       {v.myShots}–{v.oppShots}

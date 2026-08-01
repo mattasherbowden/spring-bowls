@@ -34,6 +34,7 @@ import {
   isPlayOpen,
 } from "@/lib/domain/play-state";
 import { PlayPreviewBanner } from "../_components/play-preview-banner";
+import { displayRinkNumber } from "@/lib/domain/rink-label";
 
 type PlayerLite = { display_name: string; nationality: string | null };
 type TeamRow = {
@@ -103,7 +104,7 @@ export default async function SchedulePage() {
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournament")
     .select(
-      "id, name, advance, rink_count, ends_per_game, minutes_per_end, status, play_status, fixtures_open_time",
+      "id, name, advance, rink_count, rink_number_start, ends_per_game, minutes_per_end, status, play_status, fixtures_open_time",
     )
     .neq("status", "archived")
     .limit(1)
@@ -271,6 +272,8 @@ export default async function SchedulePage() {
   const rinks = [
     ...new Set(fixtures.map((f) => f.rink).filter((r): r is number => r != null)),
   ].sort((a, b) => a - b);
+  const rinkLabel = (rink: number | null | undefined) =>
+    displayRinkNumber(rink, tournament.rink_number_start);
 
   // Projected bracket, used only if the real knockout hasn't been created yet.
   const groupSize = new Map<string, number>();
@@ -637,7 +640,9 @@ export default async function SchedulePage() {
                 key={rink}
                 className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5"
               >
-                <h2 className="text-sm font-semibold">Rink {rink}</h2>
+                <h2 className="text-sm font-semibold">
+                  Rink {rinkLabel(rink)}
+                </h2>
                 <ol className="mt-1 divide-y divide-black/5">
                   {fixtures
                     .filter((f) => f.rink === rink)
